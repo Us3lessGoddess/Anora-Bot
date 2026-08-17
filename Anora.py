@@ -58,6 +58,12 @@ async def on_ready():
 
 
 @bot.event
+async def on_guild_join(guild):
+    print(f"Joined new server: {guild.name}")
+    await connect_to_vc()
+
+
+@bot.event
 async def on_voice_state_update(member, before, after):
     # If the bot itself got disconnected (kicked, channel deleted, etc), rejoin
     if member.id == bot.user.id and after.channel is None:
