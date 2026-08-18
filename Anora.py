@@ -45,6 +45,8 @@ intents.message_content = True  # needed so she can read messages to respond to
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+vc_lock = asyncio.Lock()
+
 # --- Keep-alive web server (for UptimeRobot) ---
 app = Flask('')
 
@@ -62,20 +64,33 @@ def keep_alive():
 
 
 async def connect_to_vc():
-    channel = bot.get_channel(VOICE_CHANNEL_ID)
-    if channel is None:
-        print("Voice channel not found — check VOICE_CHANNEL_ID.")
+    if vc_lock.locked():
+        print("Connect already in progress — skipping duplicate attempt.")
         return
 
-    guild = channel.guild
-    voice_client = guild.voice_client
+    async with vc_lock:
+        channel = bot.get_channel(VOICE_CHANNEL_ID)
+        if channel is None:
+            print("Voice channel not found — check VOICE_CHANNEL_ID.")
+            return
 
-    if voice_client is None:
-        await channel.connect(reconnect=True, self_deaf=True)
-        print(f"Joined {channel.name}")
-    elif voice_client.channel.id != VOICE_CHANNEL_ID:
-        await voice_client.move_to(channel)
-        print(f"Moved to {channel.name}")
+        guild = channel.guild
+        voice_client = guild.voice_client
+
+        try:
+            if voice_client is None:
+                await channel.connect(reconnect=True, self_deaf=True)
+                print(f"Joined {channel.name}")
+            elif not voice_client.is_connected():
+                await voice_client.disconnect(force=True)
+                await asyncio.sleep(2)
+                await channel.connect(reconnect=True, self_deaf=True)
+                print(f"Reconnected to {channel.name}")
+            elif voice_client.channel.id != VOICE_CHANNEL_ID:
+                await voice_client.move_to(channel)
+                print(f"Moved to {channel.name}")
+        except Exception as e:
+            print(f"connect_to_vc error: {e}")
 
 
 @bot.event
