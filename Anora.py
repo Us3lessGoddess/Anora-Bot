@@ -132,22 +132,24 @@ async def on_message(message):
         if not user_text:
             user_text = "Hey"
 
-        async with message.channel.typing():
-            try:
-                response = groq_client.chat.completions.create(
-                    model="openai/gpt-oss-120b",
-                    max_tokens=300,
-                    messages=[
-                        {"role": "system", "content": PERSONALITY},
-                        {"role": "user", "content": user_text},
-                    ],
-                )
-                reply = response.choices[0].message.content
-            except Exception as e:
-                print(f"Groq API error: {e}")
-                reply = "Sorry, my brain glitched for a second there."
+        try:
+            response = groq_client.chat.completions.create(
+                model="openai/gpt-oss-120b",
+                max_tokens=300,
+                messages=[
+                    {"role": "system", "content": PERSONALITY},
+                    {"role": "user", "content": user_text},
+                ],
+            )
+            reply = response.choices[0].message.content
+        except Exception as e:
+            print(f"Groq API error: {e}")
+            reply = "Sorry, my brain glitched for a second there."
 
-        await message.reply(reply)
+        try:
+            await message.reply(reply)
+        except discord.HTTPException as e:
+            print(f"Discord send error (likely rate limited): {e}")
 
     await bot.process_commands(message)
 
