@@ -129,7 +129,7 @@ async def on_message(message):
         async with message.channel.typing():
             try:
                 response = groq_client.chat.completions.create(
-                    model="llama-3.3-70b-versatile",
+                    model="openai/gpt-oss-120b",
                     max_tokens=300,
                     messages=[
                         {"role": "system", "content": PERSONALITY},
