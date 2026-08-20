@@ -564,11 +564,13 @@ async def on_message(message):
                     elif call.function.name == "schedule_reminder":
                         reminder_text = args.get("message", "").strip()
                         minutes = args.get("minutes")
+                        target_channel = message.channel_mentions[0] if message.channel_mentions else message.channel
                         if not reminder_text or not isinstance(minutes, (int, float)) or minutes <= 0:
                             result = "Couldn't schedule that reminder, need a message and a positive number of minutes."
                         else:
-                            ok = await schedule_reminder(message.channel.id, reminder_text, minutes)
-                            result = f"Reminder set for {minutes} minute(s) from now." if ok else "Failed to schedule that reminder."
+                            ok = await schedule_reminder(target_channel.id, reminder_text, minutes)
+                            where = f" in #{target_channel.name}" if target_channel != message.channel else ""
+                            result = f"Reminder set for {minutes} minute(s) from now{where}." if ok else "Failed to schedule that reminder."
                     else:
                         result = "Unknown tool."
                     chat_messages.append({
@@ -607,7 +609,7 @@ async def reminder_loop():
         channel = bot.get_channel(int(channel_id))
         if channel is not None:
             try:
-                await channel.send(f"Reminder: {message}")
+                await channel.send(message)
             except discord.HTTPException as e:
                 print(f"Reminder send error: {e}")
 
