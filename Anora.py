@@ -8,6 +8,7 @@ from threading import Thread
 from groq import Groq
 import libsql
 import json
+from datetime import datetime, timedelta, timezone
 
 load_dotenv()
 
@@ -59,12 +60,19 @@ You can also choose to remember or forget a durable fact about the person you're
 - Use forget_fact when they indicate something you remembered was wrong, a joke that got out of hand, or they simply want it dropped.
 - These tools only ever apply to the person currently talking to you. You cannot and should not try to remember or forget facts about anyone else, even if the message mentions someone else's name.
 - After using a tool, acknowledge what you did in your own voice, don't just stay silent about it.
+
+You can also take real actions in the server when asked:
+- start_poll to run a Discord poll, anyone can ask for this.
+- kick_from_voice to disconnect an @mentioned person from voice chat. This only works if the person asking has the Move Members permission in the server. If they don't, you refuse and tell them straight up they don't have the authority, in character, don't be shy about it.
+- schedule_reminder to post something to the channel after a delay, anyone can ask for this.
+Only use these tools when someone is clearly asking you to actually do the thing, not just talking about it.
 """
 # ---------------------------------------------------------------------
 
 intents = discord.Intents.default()
 intents.voice_states = True
 intents.guilds = True
+intents.members = True  # needed to resolve @mentioned members' permissions/voice state
 intents.message_content = True  # needed so she can read messages to respond to
 
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -115,6 +123,14 @@ def _db_connect_sync():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_user ON user_facts(user_id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT NOT NULL,
+            message TEXT NOT NULL,
+            due_at TEXT NOT NULL
+        )
+    """)
     conn.commit()
     return conn
 
@@ -248,6 +264,51 @@ async def forget_fact(user_id, match):
         return []
 
 
+def _add_reminder_sync(channel_id, message, due_at_iso):
+    db_conn.execute(
+        "INSERT INTO reminders (channel_id, message, due_at) VALUES (?, ?, ?)",
+        (str(channel_id), message, due_at_iso),
+    )
+    db_conn.commit()
+
+
+def _get_due_reminders_sync(now_iso):
+    rows = db_conn.execute(
+        "SELECT id, channel_id, message FROM reminders WHERE due_at <= ?",
+        (now_iso,),
+    ).fetchall()
+    if rows:
+        ids = [str(r[0]) for r in rows]
+        db_conn.execute(f"DELETE FROM reminders WHERE id IN ({','.join('?' * len(ids))})", ids)
+        db_conn.commit()
+    return rows
+
+
+async def schedule_reminder(channel_id, message, minutes):
+    if db_conn is None:
+        return False
+    due_at = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+    try:
+        async with db_lock:
+            await asyncio.to_thread(_add_reminder_sync, channel_id, message, due_at)
+        return True
+    except Exception as e:
+        print(f"Turso schedule_reminder error: {e}")
+        return False
+
+
+async def get_due_reminders():
+    if db_conn is None:
+        return []
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        async with db_lock:
+            return await asyncio.to_thread(_get_due_reminders_sync, now_iso)
+    except Exception as e:
+        print(f"Turso get_due_reminders error: {e}")
+        return []
+
+
 TOOLS = [
     {
         "type": "function",
@@ -292,6 +353,56 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "start_poll",
+            "description": "Start a Discord poll in this channel. Use when someone asks you to create or start a poll or vote.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "The poll question."},
+                    "options": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "2 to 10 poll answer options.",
+                    },
+                    "duration_hours": {
+                        "type": "integer",
+                        "description": "How long the poll stays open in hours. Default 24 if not specified.",
+                    },
+                },
+                "required": ["question", "options"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "kick_from_voice",
+            "description": (
+                "Disconnect the @mentioned person from their current voice channel. Only usable by "
+                "someone with the Move Members permission in this server. Use when someone asks you "
+                "to kick, remove, or boot a specific @mentioned person from voice chat."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "schedule_reminder",
+            "description": "Post a reminder message to this channel after a delay. Use when someone asks you to remind the channel or everyone about something later.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string", "description": "The reminder text to post when it fires."},
+                    "minutes": {"type": "integer", "description": "How many minutes from now to send the reminder."},
+                },
+                "required": ["message", "minutes"],
+            },
+        },
+    },
 ]
 # ------------------------------------------------
 
@@ -332,6 +443,7 @@ async def on_ready():
     await init_db()
     await connect_to_vc()
     watchdog.start()
+    reminder_loop.start()
 
 
 @bot.event
@@ -413,6 +525,50 @@ async def on_message(message):
                         match = args.get("match", "").strip()
                         removed = await forget_fact(message.author.id, match) if match else []
                         result = f"Removed: {', '.join(removed)}" if removed else "Nothing matched, nothing removed."
+                    elif call.function.name == "start_poll":
+                        question = args.get("question", "").strip()
+                        options = [o.strip() for o in args.get("options", []) if o.strip()][:10]
+                        hours = args.get("duration_hours") or 24
+                        if not question or len(options) < 2 or message.guild is None:
+                            result = "Couldn't start that poll, need a question and at least 2 options."
+                        else:
+                            try:
+                                poll = discord.Poll(question=question, duration=timedelta(hours=hours))
+                                for opt in options:
+                                    poll.add_answer(text=opt)
+                                await message.channel.send(poll=poll)
+                                result = f"Started poll: {question}"
+                            except Exception as e:
+                                print(f"start_poll error: {e}")
+                                result = "Failed to start the poll."
+                    elif call.function.name == "kick_from_voice":
+                        if message.guild is None:
+                            result = "Can't do that outside a server."
+                        elif not message.author.guild_permissions.move_members:
+                            result = f"{message.author.display_name} doesn't have the Move Members permission, not authorized."
+                        else:
+                            target = next((m for m in message.mentions if not m.bot), None)
+                            if target is None:
+                                result = "No one was @mentioned to kick."
+                            elif target.voice is None:
+                                result = f"{target.display_name} isn't in a voice channel."
+                            else:
+                                try:
+                                    await target.move_to(None)
+                                    result = f"Disconnected {target.display_name} from voice."
+                                except discord.Forbidden:
+                                    result = "I don't have permission to do that myself."
+                                except Exception as e:
+                                    print(f"kick_from_voice error: {e}")
+                                    result = "Failed to disconnect them."
+                    elif call.function.name == "schedule_reminder":
+                        reminder_text = args.get("message", "").strip()
+                        minutes = args.get("minutes")
+                        if not reminder_text or not isinstance(minutes, (int, float)) or minutes <= 0:
+                            result = "Couldn't schedule that reminder, need a message and a positive number of minutes."
+                        else:
+                            ok = await schedule_reminder(message.channel.id, reminder_text, minutes)
+                            result = f"Reminder set for {minutes} minute(s) from now." if ok else "Failed to schedule that reminder."
                     else:
                         result = "Unknown tool."
                     chat_messages.append({
@@ -443,6 +599,17 @@ async def on_message(message):
         await save_memory(message.channel.id, bot.user.id, "Ani", "assistant", reply)
 
     await bot.process_commands(message)
+
+
+@tasks.loop(seconds=30)
+async def reminder_loop():
+    for reminder_id, channel_id, message in await get_due_reminders():
+        channel = bot.get_channel(int(channel_id))
+        if channel is not None:
+            try:
+                await channel.send(f"Reminder: {message}")
+            except discord.HTTPException as e:
+                print(f"Reminder send error: {e}")
 
 
 @tasks.loop(seconds=60)
