@@ -7,6 +7,7 @@ from flask import Flask
 from threading import Thread
 from groq import Groq
 import libsql
+import json
 
 load_dotenv()
 
@@ -51,7 +52,13 @@ Response Constraints:
 
 You can be mean to those who are mean to you.
 
-You have access to recent conversation history from this channel. Use it to stay consistent and remember what people told you, but never mention that you're "reading from a database" or "logs" out loud, just act like you naturally remember.
+You have access to recent conversation history from this channel, and to specific durable facts you've remembered about the person you're talking to right now. Use both to stay consistent, but never mention that you're "reading from a database" or "logs" out loud, just act like you naturally remember.
+
+You can also choose to remember or forget a durable fact about the person you're currently talking to, using the tools available to you:
+- Use remember_fact when they clearly tell you something true and lasting about themselves worth carrying forward (allergies, preferences, birthdays, that kind of thing). Don't remember throwaway jokes, one-off moods, or anything that isn't durable.
+- Use forget_fact when they indicate something you remembered was wrong, a joke that got out of hand, or they simply want it dropped.
+- These tools only ever apply to the person currently talking to you. You cannot and should not try to remember or forget facts about anyone else, even if the message mentions someone else's name.
+- After using a tool, acknowledge what you did in your own voice, don't just stay silent about it.
 """
 # ---------------------------------------------------------------------
 
@@ -99,6 +106,15 @@ def _db_connect_sync():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_channel ON memory(channel_id, id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_facts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            fact TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_user ON user_facts(user_id)")
     conn.commit()
     return conn
 
@@ -161,6 +177,122 @@ async def get_recent_memory(channel_id, limit=CONTEXT_MESSAGES):
     except Exception as e:
         print(f"Turso read error: {e}")
         return []
+
+
+def _get_facts_sync(user_id):
+    rows = db_conn.execute(
+        "SELECT fact FROM user_facts WHERE user_id = ? ORDER BY id ASC",
+        (str(user_id),),
+    ).fetchall()
+    return [row[0] for row in rows]
+
+
+def _add_fact_sync(user_id, fact):
+    db_conn.execute(
+        "INSERT INTO user_facts (user_id, fact) VALUES (?, ?)",
+        (str(user_id), fact),
+    )
+    db_conn.commit()
+
+
+def _forget_facts_sync(user_id, match):
+    if match.strip().lower() == "all":
+        removed = db_conn.execute(
+            "SELECT fact FROM user_facts WHERE user_id = ?", (str(user_id),)
+        ).fetchall()
+        db_conn.execute("DELETE FROM user_facts WHERE user_id = ?", (str(user_id),))
+    else:
+        removed = db_conn.execute(
+            "SELECT fact FROM user_facts WHERE user_id = ? AND fact LIKE ?",
+            (str(user_id), f"%{match}%"),
+        ).fetchall()
+        db_conn.execute(
+            "DELETE FROM user_facts WHERE user_id = ? AND fact LIKE ?",
+            (str(user_id), f"%{match}%"),
+        )
+    db_conn.commit()
+    return [row[0] for row in removed]
+
+
+async def get_facts(user_id):
+    if db_conn is None:
+        return []
+    try:
+        async with db_lock:
+            return await asyncio.to_thread(_get_facts_sync, user_id)
+    except Exception as e:
+        print(f"Turso facts read error: {e}")
+        return []
+
+
+async def remember_fact(user_id, fact):
+    if db_conn is None:
+        return False
+    try:
+        async with db_lock:
+            await asyncio.to_thread(_add_fact_sync, user_id, fact)
+        return True
+    except Exception as e:
+        print(f"Turso remember_fact error: {e}")
+        return False
+
+
+async def forget_fact(user_id, match):
+    if db_conn is None:
+        return []
+    try:
+        async with db_lock:
+            return await asyncio.to_thread(_forget_facts_sync, user_id, match)
+    except Exception as e:
+        print(f"Turso forget_fact error: {e}")
+        return []
+
+
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "remember_fact",
+            "description": (
+                "Store a short, durable fact about the person you're currently talking to "
+                "(allergies, preferences, birthday, likes/dislikes, etc). Only use this when "
+                "they're clearly telling you something lasting about themselves. This can only "
+                "ever apply to the person currently talking to you, never anyone else they mention."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fact": {
+                        "type": "string",
+                        "description": "The fact to remember, written concisely in third person, e.g. 'is allergic to shrimp'",
+                    }
+                },
+                "required": ["fact"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forget_fact",
+            "description": (
+                "Remove something previously remembered about the person you're currently talking "
+                "to, e.g. because it was a joke, it was wrong, or they no longer want it remembered. "
+                "This can only ever apply to the person currently talking to you, never anyone else."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "match": {
+                        "type": "string",
+                        "description": "Text describing what to forget, matched against stored facts. Use 'all' to forget everything stored about this person.",
+                    }
+                },
+                "required": ["match"],
+            },
+        },
+    },
+]
 # ------------------------------------------------
 
 
@@ -229,8 +361,15 @@ async def on_message(message):
             user_text = "Hey"
 
         history = await get_recent_memory(message.channel.id)
+        known_facts = await get_facts(message.author.id)
 
         chat_messages = [{"role": "system", "content": PERSONALITY}]
+        if known_facts:
+            facts_block = "\n".join(f"- {fact}" for fact in known_facts)
+            chat_messages.append({
+                "role": "system",
+                "content": f"What you already know about {message.author.display_name}:\n{facts_block}",
+            })
         for author_name, role, content in history:
             if role == "assistant":
                 chat_messages.append({"role": "assistant", "content": content})
@@ -243,8 +382,54 @@ async def on_message(message):
                 model="openai/gpt-oss-120b",
                 max_tokens=300,
                 messages=chat_messages,
+                tools=TOOLS,
+                tool_choice="auto",
             )
-            reply = response.choices[0].message.content
+            response_message = response.choices[0].message
+            tool_calls = response_message.tool_calls
+
+            if tool_calls:
+                # Bind every tool call to whoever actually sent the message, no matter
+                # what the model was told or what the arguments claim.
+                chat_messages.append({
+                    "role": "assistant",
+                    "content": response_message.content,
+                    "tool_calls": [
+                        {
+                            "id": call.id,
+                            "type": "function",
+                            "function": {"name": call.function.name, "arguments": call.function.arguments},
+                        }
+                        for call in tool_calls
+                    ],
+                })
+                for call in tool_calls:
+                    args = json.loads(call.function.arguments or "{}")
+                    if call.function.name == "remember_fact":
+                        fact = args.get("fact", "").strip()
+                        ok = await remember_fact(message.author.id, fact) if fact else False
+                        result = f"Stored: {fact}" if ok else "Failed to store that fact."
+                    elif call.function.name == "forget_fact":
+                        match = args.get("match", "").strip()
+                        removed = await forget_fact(message.author.id, match) if match else []
+                        result = f"Removed: {', '.join(removed)}" if removed else "Nothing matched, nothing removed."
+                    else:
+                        result = "Unknown tool."
+                    chat_messages.append({
+                        "role": "tool",
+                        "tool_call_id": call.id,
+                        "name": call.function.name,
+                        "content": result,
+                    })
+
+                followup = groq_client.chat.completions.create(
+                    model="openai/gpt-oss-120b",
+                    max_tokens=300,
+                    messages=chat_messages,
+                )
+                reply = followup.choices[0].message.content
+            else:
+                reply = response_message.content
         except Exception as e:
             print(f"Groq API error: {e}")
             reply = "Sorry, my brain glitched for a second there."
