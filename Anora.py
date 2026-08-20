@@ -19,9 +19,9 @@ TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 # How many past messages (per channel) to feed back to the model as context
-CONTEXT_MESSAGES = 12
+CONTEXT_MESSAGES = 20
 # How many messages (per channel) to keep in the DB before old ones get pruned
-MAX_MEMORY_PER_CHANNEL = 200
+MAX_MEMORY_PER_CHANNEL = 3000
 
 # --- Anora's personality ---
 PERSONALITY = """
