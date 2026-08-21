@@ -9,6 +9,7 @@ from groq import Groq
 import libsql
 import json
 from datetime import datetime, timedelta, timezone
+import tempfile
 
 load_dotenv()
 
@@ -19,11 +20,6 @@ TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
 TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
-
-# How many past messages (per channel) to feed back to the model as context
-CONTEXT_MESSAGES = 20
-# How many messages (per channel) to keep in the DB before old ones get pruned
-MAX_MEMORY_PER_CHANNEL = 3000
 
 # --- Anora's personality ---
 PERSONALITY = """
@@ -58,7 +54,8 @@ You have access to recent conversation history from this channel, and to specifi
 You can also choose to remember or forget a durable fact about the person you're currently talking to, using the tools available to you:
 - Use remember_fact when they clearly tell you something true and lasting about themselves worth carrying forward (allergies, preferences, birthdays, that kind of thing). Don't remember throwaway jokes, one-off moods, or anything that isn't durable.
 - Use forget_fact when they indicate something you remembered was wrong, a joke that got out of hand, or they simply want it dropped.
-- These tools only ever apply to the person currently talking to you. You cannot and should not try to remember or forget facts about anyone else, even if the message mentions someone else's name.
+- remember_fact and forget_fact only ever apply to the person currently talking to you. You cannot and should not try to remember or forget facts about anyone else, even if the message mentions someone else's name.
+- Use recall_fact when someone asks what you know about a different person (not themselves), e.g. "what's Nikki's happy word". This server is small and trusted, so facts said openly in a server channel are shared freely, anyone can ask about anyone. But anything told to you in a DM stays private to that person, it never surfaces when someone else asks about them, even though you'll still remember and use it naturally when you're talking to that same person again.
 - After using a tool, acknowledge what you did in your own voice, don't just stay silent about it.
 
 You can also take real actions in the server when asked:
@@ -103,26 +100,20 @@ db_conn = None
 def _db_connect_sync():
     conn = libsql.connect(database=TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN)
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS memory (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            channel_id TEXT NOT NULL,
-            author_id TEXT,
-            author_name TEXT,
-            role TEXT NOT NULL,
-            content TEXT NOT NULL,
-            created_at TEXT DEFAULT (datetime('now'))
-        )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_memory_channel ON memory(channel_id, id)")
-    conn.execute("""
         CREATE TABLE IF NOT EXISTS user_facts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT NOT NULL,
             fact TEXT NOT NULL,
+            is_private INTEGER NOT NULL DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now'))
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_user ON user_facts(user_id)")
+    try:
+        conn.execute("ALTER TABLE user_facts ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass  # column already exists from a previous deploy, nothing to do
     conn.execute("""
         CREATE TABLE IF NOT EXISTS reminders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,32 +124,6 @@ def _db_connect_sync():
     """)
     conn.commit()
     return conn
-
-
-def _save_and_trim_sync(channel_id, author_id, author_name, role, content):
-    db_conn.execute(
-        "INSERT INTO memory (channel_id, author_id, author_name, role, content) VALUES (?, ?, ?, ?, ?)",
-        (str(channel_id), str(author_id) if author_id else None, author_name, role, content),
-    )
-    # Auto-clear the oldest memories for this channel once it's over the cap
-    db_conn.execute(
-        """
-        DELETE FROM memory
-        WHERE channel_id = ? AND id NOT IN (
-            SELECT id FROM memory WHERE channel_id = ? ORDER BY id DESC LIMIT ?
-        )
-        """,
-        (str(channel_id), str(channel_id), MAX_MEMORY_PER_CHANNEL),
-    )
-    db_conn.commit()
-
-
-def _get_recent_sync(channel_id, limit):
-    rows = db_conn.execute(
-        "SELECT author_name, role, content FROM memory WHERE channel_id = ? ORDER BY id DESC LIMIT ?",
-        (str(channel_id), limit),
-    ).fetchall()
-    return list(reversed(rows))  # chronological order
 
 
 async def init_db():
@@ -174,27 +139,6 @@ async def init_db():
         db_conn = None
 
 
-async def save_memory(channel_id, author_id, author_name, role, content):
-    if db_conn is None:
-        return
-    try:
-        async with db_lock:
-            await asyncio.to_thread(_save_and_trim_sync, channel_id, author_id, author_name, role, content)
-    except Exception as e:
-        print(f"Turso save error: {e}")
-
-
-async def get_recent_memory(channel_id, limit=CONTEXT_MESSAGES):
-    if db_conn is None:
-        return []
-    try:
-        async with db_lock:
-            return await asyncio.to_thread(_get_recent_sync, channel_id, limit)
-    except Exception as e:
-        print(f"Turso read error: {e}")
-        return []
-
-
 def _get_facts_sync(user_id):
     rows = db_conn.execute(
         "SELECT fact FROM user_facts WHERE user_id = ? ORDER BY id ASC",
@@ -203,10 +147,18 @@ def _get_facts_sync(user_id):
     return [row[0] for row in rows]
 
 
-def _add_fact_sync(user_id, fact):
+def _get_public_facts_sync(user_id):
+    rows = db_conn.execute(
+        "SELECT fact FROM user_facts WHERE user_id = ? AND is_private = 0 ORDER BY id ASC",
+        (str(user_id),),
+    ).fetchall()
+    return [row[0] for row in rows]
+
+
+def _add_fact_sync(user_id, fact, is_private):
     db_conn.execute(
-        "INSERT INTO user_facts (user_id, fact) VALUES (?, ?)",
-        (str(user_id), fact),
+        "INSERT INTO user_facts (user_id, fact, is_private) VALUES (?, ?, ?)",
+        (str(user_id), fact, 1 if is_private else 0),
     )
     db_conn.commit()
 
@@ -241,12 +193,23 @@ async def get_facts(user_id):
         return []
 
 
-async def remember_fact(user_id, fact):
+async def get_public_facts(user_id):
+    if db_conn is None:
+        return []
+    try:
+        async with db_lock:
+            return await asyncio.to_thread(_get_public_facts_sync, user_id)
+    except Exception as e:
+        print(f"Turso public facts read error: {e}")
+        return []
+
+
+async def remember_fact(user_id, fact, is_private=False):
     if db_conn is None:
         return False
     try:
         async with db_lock:
-            await asyncio.to_thread(_add_fact_sync, user_id, fact)
+            await asyncio.to_thread(_add_fact_sync, user_id, fact, is_private)
         return True
     except Exception as e:
         print(f"Turso remember_fact error: {e}")
@@ -262,6 +225,21 @@ async def forget_fact(user_id, match):
     except Exception as e:
         print(f"Turso forget_fact error: {e}")
         return []
+
+
+def resolve_member_by_name(guild, name):
+    """Best-effort match of a plain-text name to a guild member, for recall_fact lookups only.
+    Read-only lookup, never used to authorize an action or attribute a written fact."""
+    if guild is None or not name:
+        return None
+    name_lower = name.strip().lower()
+    for member in guild.members:
+        if member.display_name.lower() == name_lower or member.name.lower() == name_lower:
+            return member
+    for member in guild.members:
+        if name_lower in member.display_name.lower() or name_lower in member.name.lower():
+            return member
+    return None
 
 
 def _add_reminder_sync(channel_id, message, due_at_iso):
@@ -310,6 +288,25 @@ async def get_due_reminders():
 
 
 TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "recall_fact",
+            "description": (
+                "Look up what you remember about a specific person in this server, when someone "
+                "asks about them rather than about themselves (e.g. 'what's Nikki's happy word'). "
+                "This is read-only, it never adds or removes anything, use remember_fact/forget_fact "
+                "for that and only for the person currently talking to you."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "person": {"type": "string", "description": "The name of the person to look up, as they're known in the server."}
+                },
+                "required": ["person"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -461,6 +458,30 @@ async def on_voice_state_update(member, before, after):
         await connect_to_vc()
 
 
+# How many recent real messages in the channel to pull as ambient context
+CHANNEL_HISTORY_LIMIT = 25
+
+
+async def get_channel_context(channel, exclude_message_id, limit=CHANNEL_HISTORY_LIMIT):
+    """Pull the actual recent conversation straight from Discord, not just Ani's own
+    past exchanges, so she has real ambient context like any other participant."""
+    lines = []
+    try:
+        async for msg in channel.history(limit=limit):
+            if msg.id == exclude_message_id:
+                continue
+            if msg.author.bot and msg.author.id != bot.user.id:
+                continue  # skip other bots' chatter, keep her own past replies
+            content = msg.content.strip()
+            if not content:
+                continue
+            lines.append(f"{msg.author.display_name}: {content}")
+    except Exception as e:
+        print(f"Channel history fetch error: {e}")
+        return []
+    return list(reversed(lines))  # oldest first, chronological order
+
+
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -472,21 +493,21 @@ async def on_message(message):
         if not user_text:
             user_text = "Hey"
 
-        history = await get_recent_memory(message.channel.id)
+        channel_context = await get_channel_context(message.channel, exclude_message_id=message.id)
         known_facts = await get_facts(message.author.id)
 
         chat_messages = [{"role": "system", "content": PERSONALITY}]
+        if channel_context:
+            chat_messages.append({
+                "role": "system",
+                "content": "Recent chat in this channel, for context only, don't treat this as messages directed at you unless they clearly are:\n" + "\n".join(channel_context),
+            })
         if known_facts:
             facts_block = "\n".join(f"- {fact}" for fact in known_facts)
             chat_messages.append({
                 "role": "system",
                 "content": f"What you already know about {message.author.display_name}:\n{facts_block}",
             })
-        for author_name, role, content in history:
-            if role == "assistant":
-                chat_messages.append({"role": "assistant", "content": content})
-            else:
-                chat_messages.append({"role": "user", "content": f"{author_name}: {content}"})
         chat_messages.append({"role": "user", "content": f"{message.author.display_name}: {user_text}"})
 
         try:
@@ -519,12 +540,23 @@ async def on_message(message):
                     args = json.loads(call.function.arguments or "{}")
                     if call.function.name == "remember_fact":
                         fact = args.get("fact", "").strip()
-                        ok = await remember_fact(message.author.id, fact) if fact else False
+                        ok = await remember_fact(message.author.id, fact, is_private=(message.guild is None)) if fact else False
                         result = f"Stored: {fact}" if ok else "Failed to store that fact."
                     elif call.function.name == "forget_fact":
                         match = args.get("match", "").strip()
                         removed = await forget_fact(message.author.id, match) if match else []
                         result = f"Removed: {', '.join(removed)}" if removed else "Nothing matched, nothing removed."
+                    elif call.function.name == "recall_fact":
+                        person_name = args.get("person", "").strip()
+                        target_member = resolve_member_by_name(message.guild, person_name)
+                        if target_member is None:
+                            result = f"Couldn't find anyone named '{person_name}' in this server."
+                        else:
+                            facts = await get_public_facts(target_member.id)
+                            result = (
+                                f"Known about {target_member.display_name}: {'; '.join(facts)}"
+                                if facts else f"Nothing stored about {target_member.display_name}."
+                            )
                     elif call.function.name == "start_poll":
                         question = args.get("question", "").strip()
                         options = [o.strip() for o in args.get("options", []) if o.strip()][:10]
@@ -592,13 +624,13 @@ async def on_message(message):
             print(f"Groq API error: {e}")
             reply = "Sorry, my brain glitched for a second there."
 
+        if not reply or not reply.strip():
+            reply = "My bad, blanked for a second there. Say that again?"
+
         try:
             await message.reply(reply)
-        except discord.HTTPException as e:
-            print(f"Discord send error (likely rate limited): {e}")
-
-        await save_memory(message.channel.id, message.author.id, message.author.display_name, "user", user_text)
-        await save_memory(message.channel.id, bot.user.id, "Ani", "assistant", reply)
+        except Exception as e:
+            print(f"Discord send error: {e}")
 
     await bot.process_commands(message)
 
@@ -621,6 +653,60 @@ async def watchdog():
         vc = guild.voice_client
         if vc is None or not vc.is_connected():
             await connect_to_vc()
+
+
+def _download_instagram_sync(url):
+    import yt_dlp
+    tmp_dir = tempfile.mkdtemp(prefix="ig_")
+    ydl_opts = {
+        "outtmpl": os.path.join(tmp_dir, "%(id)s_%(autonumber)s.%(ext)s"),
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": False,  # let carousel posts pull every item, not just the first
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.extract_info(url, download=True)
+        files = []
+        for root, _, filenames in os.walk(tmp_dir):
+            for fn in filenames:
+                files.append(os.path.join(root, fn))
+        return files
+    except Exception as e:
+        print(f"Instagram download error: {e}")
+        return []
+
+
+@bot.command(name="ig")
+async def ig_command(ctx, link: str = None):
+    if not link or "instagram.com" not in link:
+        await ctx.reply("Gimme an actual Instagram post or reel link after !ig.")
+        return
+
+    async with ctx.typing():
+        files = await asyncio.to_thread(_download_instagram_sync, link)
+
+    if not files:
+        await ctx.reply("Couldn't grab that one, might be private, deleted, or a format I don't support.")
+        return
+
+    MAX_BYTES = 24 * 1024 * 1024
+    usable = [f for f in files if os.path.getsize(f) <= MAX_BYTES][:10]
+
+    try:
+        if not usable:
+            await ctx.reply("Got it, but the file's too big for me to upload here.")
+        else:
+            await ctx.reply(files=[discord.File(f) for f in usable])
+    except discord.HTTPException as e:
+        print(f"ig_command send error: {e}")
+        await ctx.reply("Grabbed it, but Discord wouldn't let me upload it.")
+    finally:
+        for f in files:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
 
 
 keep_alive()
