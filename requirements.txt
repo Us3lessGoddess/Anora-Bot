@@ -4,3 +4,4 @@ PyNaCl
 flask
 groq
 libsql
+yt-dlp
