@@ -669,6 +669,40 @@ async def watchdog():
             await connect_to_vc()
 
 
+def _extract_ig_shortcode(url):
+    import re
+    match = re.search(r"/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)", url)
+    return match.group(1) if match else None
+
+
+def _download_instagram_images_sync(url, tmp_dir):
+    import instaloader
+    shortcode = _extract_ig_shortcode(url)
+    if not shortcode:
+        return []
+    try:
+        loader = instaloader.Instaloader(
+            download_videos=True,
+            download_video_thumbnails=False,
+            save_metadata=False,
+            download_comments=False,
+            post_metadata_txt_pattern="",
+            quiet=True,
+            dirname_pattern=tmp_dir,
+        )
+        post = instaloader.Post.from_shortcode(loader.context, shortcode)
+        loader.download_post(post, target=tmp_dir)
+        files = []
+        for root, _, filenames in os.walk(tmp_dir):
+            for fn in filenames:
+                if fn.lower().endswith((".jpg", ".jpeg", ".png", ".webp", ".mp4")):
+                    files.append(os.path.join(root, fn))
+        return files
+    except Exception as e:
+        print(f"Instagram instaloader fallback error: {e}")
+        return []
+
+
 def _download_instagram_sync(url):
     import yt_dlp
     tmp_dir = tempfile.mkdtemp(prefix="ig_")
@@ -685,10 +719,14 @@ def _download_instagram_sync(url):
         for root, _, filenames in os.walk(tmp_dir):
             for fn in filenames:
                 files.append(os.path.join(root, fn))
-        return files
+        if files:
+            return files
     except Exception as e:
-        print(f"Instagram download error: {e}")
-        return []
+        print(f"yt-dlp Instagram download error: {e}")
+
+    # yt-dlp is fundamentally a video downloader and routinely fails on image-only
+    # Instagram posts, fall back to instaloader which handles images natively.
+    return _download_instagram_images_sync(url, tmp_dir)
 
 
 @bot.command(name="ig")
