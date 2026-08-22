@@ -510,7 +510,7 @@ async def on_message(message):
         if channel_context:
             chat_messages.append({
                 "role": "system",
-                "content": "Recent chat in this channel, for context only, don't treat this as messages directed at you unless they clearly are:\n" + "\n".join(channel_context),
+                "content": "Recent chat in this channel, for background context only. Names mentioned here are NOT necessarily who you're replying to, that's specified separately below:\n" + "\n".join(channel_context),
             })
         if known_facts:
             facts_block = "\n".join(f"- {fact}" for fact in known_facts)
@@ -518,7 +518,14 @@ async def on_message(message):
                 "role": "system",
                 "content": f"What you already know about {message.author.display_name}:\n{facts_block}",
             })
-        chat_messages.append({"role": "user", "content": f"{message.author.display_name}: {user_text}"})
+        chat_messages.append({
+            "role": "user",
+            "content": (
+                f"[The message you are replying to right now is from {message.author.display_name}. "
+                f"Don't confuse them with anyone named in the chat history above, that's just background context.]\n"
+                f"{message.author.display_name}: {user_text}"
+            ),
+        })
 
         try:
             response = groq_client.chat.completions.create(
