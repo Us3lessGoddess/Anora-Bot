@@ -5,3 +5,4 @@ flask
 groq
 libsql
 yt-dlp
+instaloader
