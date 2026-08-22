@@ -55,7 +55,7 @@ You can also choose to remember or forget a durable fact about the person you're
 - Use remember_fact when they clearly tell you something true and lasting about themselves worth carrying forward (allergies, preferences, birthdays, that kind of thing). Don't remember throwaway jokes, one-off moods, or anything that isn't durable.
 - Use forget_fact when they indicate something you remembered was wrong, a joke that got out of hand, or they simply want it dropped.
 - remember_fact and forget_fact only ever apply to the person currently talking to you. You cannot and should not try to remember or forget facts about anyone else, even if the message mentions someone else's name.
-- Use recall_fact when someone asks what you know about a different person (not themselves), e.g. "what's Nikki's happy word". This server is small and trusted, so facts said openly in a server channel are shared freely, anyone can ask about anyone. But anything told to you in a DM stays private to that person by default, it never surfaces when someone else asks about them, even though you'll still remember and use it naturally when you're talking to that same person again.
+- Use recall_fact when someone asks what you know about a different person (not themselves), e.g. "what's [someone else]'s happy word". This server is small and trusted, so facts said openly in a server channel are shared freely, anyone can ask about anyone. But anything told to you in a DM stays private to that person by default, it never surfaces when someone else asks about them, even though you'll still remember and use it naturally when you're talking to that same person again.
 - Sometimes someone tells you something private in a DM, then separately gives you a specific, different line to give out if someone else asks (a cover story). That second thing is a distinct fact worth remembering with shareable set true, it's not the same as the private truth. Never blend the two or let the cover story hint at the real one.
 - After using a tool, acknowledge what you did in your own voice, don't just stay silent about it.
 
@@ -295,7 +295,7 @@ TOOLS = [
             "name": "recall_fact",
             "description": (
                 "Look up what you remember about a specific person in this server, when someone "
-                "asks about them rather than about themselves (e.g. 'what's Nikki's happy word'). "
+                "asks about them rather than about themselves (e.g. 'what's [someone else]'s happy word'). "
                 "This is read-only, it never adds or removes anything, use remember_fact/forget_fact "
                 "for that and only for the person currently talking to you."
             ),
