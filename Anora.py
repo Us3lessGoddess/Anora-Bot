@@ -635,6 +635,11 @@ async def on_message(message):
                         "content": result,
                     })
 
+                chat_messages.append({
+                    "role": "system",
+                    "content": f"Reminder: you are about to reply to {message.author.display_name}. Use their real name, not a name from the tool results or chat history above.",
+                })
+
                 followup = groq_client.chat.completions.create(
                     model="openai/gpt-oss-120b",
                     max_tokens=300,
