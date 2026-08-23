@@ -58,7 +58,7 @@ You can also choose to remember or forget a durable fact about the person you're
 - Use forget_fact when they indicate something you remembered was wrong, a joke that got out of hand, or they simply want it dropped.
 - remember_fact and forget_fact only ever apply to the person currently talking to you. You cannot and should not try to remember or forget facts about anyone else, even if the message mentions someone else's name.
 - Use recall_fact when someone asks what you know about a different person (not themselves), e.g. "what's [someone else]'s happy word". This server is small and trusted, so facts said openly in a server channel are shared freely, anyone can ask about anyone. But anything told to you in a DM stays private to that person by default, it never surfaces when someone else asks about them, even though you'll still remember and use it naturally when you're talking to that same person again.
-- Sometimes someone tells you something private in a DM, then separately gives you a specific, different line to give out if someone else asks (a cover story). That second thing is a distinct fact worth remembering with shareable set true, it's not the same as the private truth. Never blend the two or let the cover story hint at the real one.
+- Sometimes someone tells you something private in a DM, then separately gives you a specific, different line to give out if someone else asks (a cover story). That second thing is a distinct fact worth remembering with shareable set true, it's not the same as the private truth. Never blend the two or let the cover story hint at the real one. If they name who specifically should hear it ("if SHE asks", "tell HIM"), use share_with so it only ever reaches that one person, not the whole server, that's usually what they actually mean.
 - After using a tool, acknowledge what you did in your own voice, don't just stay silent about it.
 
 You can also take real actions in the server when asked:
@@ -108,12 +108,18 @@ def _db_connect_sync():
             user_id TEXT NOT NULL,
             fact TEXT NOT NULL,
             is_private INTEGER NOT NULL DEFAULT 0,
+            share_with_id TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_facts_user ON user_facts(user_id)")
     try:
         conn.execute("ALTER TABLE user_facts ADD COLUMN is_private INTEGER NOT NULL DEFAULT 0")
+        conn.commit()
+    except Exception:
+        pass  # column already exists from a previous deploy, nothing to do
+    try:
+        conn.execute("ALTER TABLE user_facts ADD COLUMN share_with_id TEXT")
         conn.commit()
     except Exception:
         pass  # column already exists from a previous deploy, nothing to do
@@ -150,18 +156,19 @@ def _get_facts_sync(user_id):
     return [row[0] for row in rows]
 
 
-def _get_public_facts_sync(user_id):
+def _get_public_facts_sync(user_id, asker_id):
     rows = db_conn.execute(
-        "SELECT fact FROM user_facts WHERE user_id = ? AND is_private = 0 ORDER BY id ASC",
-        (str(user_id),),
+        "SELECT fact FROM user_facts WHERE user_id = ? AND is_private = 0 "
+        "AND (share_with_id IS NULL OR share_with_id = ?) ORDER BY id ASC",
+        (str(user_id), str(asker_id)),
     ).fetchall()
     return [row[0] for row in rows]
 
 
-def _add_fact_sync(user_id, fact, is_private):
+def _add_fact_sync(user_id, fact, is_private, share_with_id):
     db_conn.execute(
-        "INSERT INTO user_facts (user_id, fact, is_private) VALUES (?, ?, ?)",
-        (str(user_id), fact, 1 if is_private else 0),
+        "INSERT INTO user_facts (user_id, fact, is_private, share_with_id) VALUES (?, ?, ?, ?)",
+        (str(user_id), fact, 1 if is_private else 0, str(share_with_id) if share_with_id else None),
     )
     db_conn.commit()
 
@@ -196,23 +203,23 @@ async def get_facts(user_id):
         return []
 
 
-async def get_public_facts(user_id):
+async def get_public_facts(user_id, asker_id):
     if db_conn is None:
         return []
     try:
         async with db_lock:
-            return await asyncio.to_thread(_get_public_facts_sync, user_id)
+            return await asyncio.to_thread(_get_public_facts_sync, user_id, asker_id)
     except Exception as e:
         print(f"Turso public facts read error: {e}")
         return []
 
 
-async def remember_fact(user_id, fact, is_private=False):
+async def remember_fact(user_id, fact, is_private=False, share_with_id=None):
     if db_conn is None:
         return False
     try:
         async with db_lock:
-            await asyncio.to_thread(_add_fact_sync, user_id, fact, is_private)
+            await asyncio.to_thread(_add_fact_sync, user_id, fact, is_private, share_with_id)
         return True
     except Exception as e:
         print(f"Turso remember_fact error: {e}")
@@ -241,6 +248,16 @@ def resolve_member_by_name(guild, name):
             return member
     for member in guild.members:
         if name_lower in member.display_name.lower() or name_lower in member.name.lower():
+            return member
+    return None
+
+
+def resolve_member_across_guilds(name):
+    """Same as resolve_member_by_name but searches every guild the bot is in, since a DM
+    has no message.guild to search from directly."""
+    for guild in bot.guilds:
+        member = resolve_member_by_name(guild, name)
+        if member:
             return member
     return None
 
@@ -331,9 +348,18 @@ TOOLS = [
                         "type": "boolean",
                         "description": (
                             "Only relevant in a DM. True ONLY if they explicitly say this specific "
-                            "thing can be told to others if asked (e.g. 'if she asks, tell her I find "
+                            "thing can be told to someone if asked (e.g. 'if she asks, tell her I find "
                             "her cute'). False (default) for anything said in a DM without that explicit "
                             "permission, that stays sealed to just the two of you."
+                        ),
+                    },
+                    "share_with": {
+                        "type": "string",
+                        "description": (
+                            "If shareable is true and they named a SPECIFIC person this should be told to "
+                            "(e.g. 'if SHE asks'), put that person's name here, it'll only ever be shared "
+                            "with that one person, nobody else. Leave blank if it's genuinely fine to tell "
+                            "anyone who asks, not just one specific person."
                         ),
                     },
                 },
@@ -533,7 +559,7 @@ async def on_message(message):
             response = groq_client.chat.completions.create(
                 model="openai/gpt-oss-120b",
                 max_tokens=1024,
-                reasoning_effort="low",
+                reasoning_effort="medium",
                 messages=chat_messages,
                 tools=TOOLS,
                 tool_choice="auto",
@@ -560,11 +586,16 @@ async def on_message(message):
                     args = json.loads(call.function.arguments or "{}")
                     if call.function.name == "remember_fact":
                         fact = args.get("fact", "").strip()
+                        share_with_id = None
                         if message.guild is not None:
                             fact_is_private = False  # said openly in a shared channel, already public
                         else:
                             fact_is_private = not bool(args.get("shareable", False))
-                        ok = await remember_fact(message.author.id, fact, is_private=fact_is_private) if fact else False
+                            share_with_name = args.get("share_with", "").strip()
+                            if not fact_is_private and share_with_name:
+                                target = resolve_member_across_guilds(share_with_name)
+                                share_with_id = target.id if target else None
+                        ok = await remember_fact(message.author.id, fact, is_private=fact_is_private, share_with_id=share_with_id) if fact else False
                         result = f"Stored: {fact}" if ok else "Failed to store that fact."
                     elif call.function.name == "forget_fact":
                         match = args.get("match", "").strip()
@@ -576,7 +607,7 @@ async def on_message(message):
                         if target_member is None:
                             result = f"Couldn't find anyone named '{person_name}' in this server."
                         else:
-                            facts = await get_public_facts(target_member.id)
+                            facts = await get_public_facts(target_member.id, message.author.id)
                             result = (
                                 f"Known about {target_member.display_name}: {'; '.join(facts)}"
                                 if facts else f"Nothing stored about {target_member.display_name}."
@@ -644,7 +675,7 @@ async def on_message(message):
                 followup = groq_client.chat.completions.create(
                     model="openai/gpt-oss-120b",
                     max_tokens=1024,
-                    reasoning_effort="low",
+                    reasoning_effort="medium",
                     messages=chat_messages,
                 )
                 reply = followup.choices[0].message.content
