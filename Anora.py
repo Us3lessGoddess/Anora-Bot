@@ -532,7 +532,8 @@ async def on_message(message):
         try:
             response = groq_client.chat.completions.create(
                 model="openai/gpt-oss-120b",
-                max_tokens=300,
+                max_tokens=1024,
+                reasoning_effort="low",
                 messages=chat_messages,
                 tools=TOOLS,
                 tool_choice="auto",
@@ -642,7 +643,8 @@ async def on_message(message):
 
                 followup = groq_client.chat.completions.create(
                     model="openai/gpt-oss-120b",
-                    max_tokens=300,
+                    max_tokens=1024,
+                    reasoning_effort="low",
                     messages=chat_messages,
                 )
                 reply = followup.choices[0].message.content
