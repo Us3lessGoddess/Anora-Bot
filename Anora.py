@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands, tasks
 import asyncio
+import time
 import os
 from dotenv import load_dotenv
 from flask import Flask
@@ -808,5 +809,26 @@ async def ig_command(ctx, link: str = None):
                 pass
 
 
+def run_with_backoff():
+    """If bot.run() dies (crash, Discord rate limit block, network blip), don't just let the
+    process exit, that hands control to Render's instant auto-restart, which retries the login
+    immediately with zero cooldown, exactly the pattern that turns one temporary Discord rate
+    limit into a repeating one. Instead, catch it here and wait a real, growing amount of time
+    before trying again, while the Flask keep-alive thread keeps running the whole time so
+    Render's health check stays green and never intervenes on its own."""
+    backoff = 60  # start at 1 minute
+    max_backoff = 3600  # cap at 1 hour
+    while True:
+        try:
+            bot.run(TOKEN)
+            print("bot.run() exited cleanly, stopping.")
+            break
+        except Exception as e:
+            print(f"bot.run() crashed: {e}")
+        print(f"Waiting {backoff}s before trying to log in again...")
+        time.sleep(backoff)
+        backoff = min(backoff * 2, max_backoff)
+
+
 keep_alive()
-bot.run(TOKEN)
+run_with_backoff()
