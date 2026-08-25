@@ -3,6 +3,7 @@ from discord.ext import commands, tasks
 import asyncio
 import time
 import re
+import sys
 import os
 from dotenv import load_dotenv
 from flask import Flask
@@ -954,25 +955,55 @@ async def ig_command(ctx, link: str = None):
                 pass
 
 
+BACKOFF_STATE_FILE = "/tmp/anora_login_backoff.txt"
+
+
+def _get_last_backoff():
+    try:
+        with open(BACKOFF_STATE_FILE, "r") as f:
+            return int(f.read().strip())
+    except Exception:
+        return 0
+
+
+def _save_backoff(seconds):
+    try:
+        with open(BACKOFF_STATE_FILE, "w") as f:
+            f.write(str(seconds))
+    except Exception as e:
+        print(f"Could not persist backoff state: {e}")
+
+
+def _clear_backoff():
+    try:
+        os.remove(BACKOFF_STATE_FILE)
+    except OSError:
+        pass
+
+
 def run_with_backoff():
-    """If bot.run() dies (crash, Discord rate limit block, network blip), don't just let the
-    process exit, that hands control to Render's instant auto-restart, which retries the login
-    immediately with zero cooldown, exactly the pattern that turns one temporary Discord rate
-    limit into a repeating one. Instead, catch it here and wait a real, growing amount of time
-    before trying again, while the Flask keep-alive thread keeps running the whole time so
-    Render's health check stays green and never intervenes on its own."""
-    backoff = 60  # start at 1 minute
+    """If bot.run() dies, don't retry it in the same process, that risks reusing a bot
+    object whose internals discord.py already tore down, which can silently hang instead
+    of raising a catchable error. Instead: sleep for a real, growing cooldown here, then
+    let the process actually exit so Render spins up a completely fresh one next time,
+    with no stale state carried over. The backoff duration itself is persisted to a small
+    local file so it keeps growing across restarts instead of resetting to the minimum
+    every single time."""
     max_backoff = 3600  # cap at 1 hour
-    while True:
-        try:
-            bot.run(TOKEN)
-            print("bot.run() exited cleanly, stopping.")
-            break
-        except Exception as e:
-            print(f"bot.run() crashed: {e}")
-        print(f"Waiting {backoff}s before trying to log in again...")
-        time.sleep(backoff)
-        backoff = min(backoff * 2, max_backoff)
+    try:
+        bot.run(TOKEN)
+        print("bot.run() exited cleanly.")
+        _clear_backoff()
+        return
+    except Exception as e:
+        print(f"bot.run() crashed: {e}")
+
+    prev = _get_last_backoff()
+    backoff = 60 if prev == 0 else min(prev * 2, max_backoff)
+    _save_backoff(backoff)
+    print(f"Sleeping {backoff}s before exiting, Render will restart with a fresh process after that.")
+    time.sleep(backoff)
+    sys.exit(1)
 
 
 keep_alive()
