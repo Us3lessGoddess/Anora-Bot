@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands, tasks
 import asyncio
 import time
+import re
 import os
 from dotenv import load_dotenv
 from flask import Flask
@@ -66,6 +67,7 @@ You can also take real actions in the server when asked:
 - start_poll to run a Discord poll, anyone can ask for this.
 - kick_from_voice to disconnect an @mentioned person from voice chat. This only works if the person asking has the Move Members permission in the server. If they don't, you refuse and tell them straight up they don't have the authority, in character, don't be shy about it.
 - schedule_reminder to post something to the channel after a delay, anyone can ask for this.
+- purge_messages to delete an @mentioned person's recent messages in a channel, within a time window. This only works if the person asking has the Manage Messages permission in the server. If they don't, you refuse and tell them straight up, same as kick_from_voice.
 Only use these tools when someone is clearly asking you to actually do the thing, not just talking about it.
 """
 # ---------------------------------------------------------------------
@@ -132,6 +134,17 @@ def _db_connect_sync():
             due_at TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS person_memory (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            is_private INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_person_memory_user ON person_memory(user_id, id)")
     conn.commit()
     return conn
 
@@ -225,6 +238,62 @@ async def remember_fact(user_id, fact, is_private=False, share_with_id=None):
     except Exception as e:
         print(f"Turso remember_fact error: {e}")
         return False
+
+
+def _save_person_memory_sync(user_id, role, content, is_private):
+    db_conn.execute(
+        "INSERT INTO person_memory (user_id, role, content, is_private) VALUES (?, ?, ?, ?)",
+        (str(user_id), role, content, 1 if is_private else 0),
+    )
+    # Auto-clear the oldest entries for this person once over the retention cap
+    db_conn.execute(
+        """
+        DELETE FROM person_memory
+        WHERE user_id = ? AND id NOT IN (
+            SELECT id FROM person_memory WHERE user_id = ? ORDER BY id DESC LIMIT ?
+        )
+        """,
+        (str(user_id), str(user_id), PERSON_MEMORY_CAP),
+    )
+    db_conn.commit()
+
+
+def _get_person_memory_sync(user_id, limit, include_private):
+    if include_private:
+        rows = db_conn.execute(
+            "SELECT role, content FROM person_memory WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+            (str(user_id), limit),
+        ).fetchall()
+    else:
+        rows = db_conn.execute(
+            "SELECT role, content FROM person_memory WHERE user_id = ? AND is_private = 0 ORDER BY id DESC LIMIT ?",
+            (str(user_id), limit),
+        ).fetchall()
+    return list(reversed(rows))  # chronological order
+
+
+async def save_person_memory(user_id, role, content, is_private):
+    if db_conn is None:
+        return
+    try:
+        async with db_lock:
+            await asyncio.to_thread(_save_person_memory_sync, user_id, role, content, is_private)
+    except Exception as e:
+        print(f"Turso person_memory save error: {e}")
+
+
+async def get_person_memory(user_id, is_dm, limit=PERSON_MEMORY_CONTEXT_LIMIT):
+    """A DM can see the full history with this person, private included, since it's already
+    the most trusted space. A public channel only ever sees what was already said in public,
+    so DM content never bleeds into a reply that other people in the server can read."""
+    if db_conn is None:
+        return []
+    try:
+        async with db_lock:
+            return await asyncio.to_thread(_get_person_memory_sync, user_id, limit, is_dm)
+    except Exception as e:
+        print(f"Turso person_memory read error: {e}")
+        return []
 
 
 async def forget_fact(user_id, match):
@@ -439,6 +508,24 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "purge_messages",
+            "description": (
+                "Delete recent messages from an @mentioned person, within a time window, in a channel. "
+                "Only usable by someone with the Manage Messages permission in this server. Use when "
+                "someone asks you to delete, clear, or clean up a specific @mentioned person's recent messages."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "minutes": {"type": "integer", "description": "How far back, in minutes, to delete messages from (e.g. 60 for 'the last hour')."},
+                },
+                "required": ["minutes"],
+            },
+        },
+    },
 ]
 # ------------------------------------------------
 
@@ -499,6 +586,10 @@ async def on_voice_state_update(member, before, after):
 
 # How many recent real messages in the channel to pull as ambient context
 CHANNEL_HISTORY_LIMIT = 25
+# How many messages to retain per person, across all channels, in Turso
+PERSON_MEMORY_CAP = 300
+# How many of those most recent ones actually get pulled into a single reply's context
+PERSON_MEMORY_CONTEXT_LIMIT = 30
 
 
 async def get_channel_context(channel, exclude_message_id, limit=CHANNEL_HISTORY_LIMIT):
@@ -534,8 +625,33 @@ async def on_message(message):
 
         channel_context = await get_channel_context(message.channel, exclude_message_id=message.id)
         known_facts = await get_facts(message.author.id)
+        is_dm = message.guild is None
+        person_history = await get_person_memory(message.author.id, is_dm=is_dm)
+
+        ph_time = datetime.now(timezone(timedelta(hours=8)))
+        current_time_str = ph_time.strftime("%m/%d/%Y %H:%M")
+        wants_timestamp = re.search(r"\btimestamp\b", user_text, re.IGNORECASE) is not None
 
         chat_messages = [{"role": "system", "content": PERSONALITY}]
+        chat_messages.append({
+            "role": "system",
+            "content": f"The actual current date and time (Philippines time) is {current_time_str}. Never guess or make up a different date/time.",
+        })
+        if wants_timestamp:
+            chat_messages.append({
+                "role": "system",
+                "content": f"The word 'timestamp' appears in their message just now, they want the current date/time. You MUST include {current_time_str} in your reply.",
+            })
+        if person_history:
+            history_lines = [f"{'You' if role == 'assistant' else message.author.display_name}: {content}" for role, content in person_history]
+            chat_messages.append({
+                "role": "system",
+                "content": (
+                    f"Your own past conversation history specifically with {message.author.display_name}, possibly from other channels or DMs, "
+                    f"for continuity. This is about YOUR relationship with them specifically, separate from the general channel chatter below:\n"
+                    + "\n".join(history_lines)
+                ),
+            })
         if channel_context:
             chat_messages.append({
                 "role": "system",
@@ -659,6 +775,33 @@ async def on_message(message):
                             ok = await schedule_reminder(target_channel.id, reminder_text, minutes)
                             where = f" in #{target_channel.name}" if target_channel != message.channel else ""
                             result = f"Reminder set for {minutes} minute(s) from now{where}." if ok else "Failed to schedule that reminder."
+                    elif call.function.name == "purge_messages":
+                        if message.guild is None:
+                            result = "Can't do that outside a server."
+                        elif not message.author.guild_permissions.manage_messages:
+                            result = f"{message.author.display_name} doesn't have the Manage Messages permission, not authorized."
+                        else:
+                            target = next((m for m in message.mentions if not m.bot), None)
+                            minutes = args.get("minutes")
+                            target_channel = message.channel_mentions[0] if message.channel_mentions else message.channel
+                            if target is None:
+                                result = "No one was @mentioned to delete messages from."
+                            elif not isinstance(minutes, (int, float)) or minutes <= 0:
+                                result = "Need a positive number of minutes to know how far back to go."
+                            else:
+                                cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+                                try:
+                                    deleted = await target_channel.purge(
+                                        limit=500,
+                                        after=cutoff,
+                                        check=lambda m: m.author.id == target.id,
+                                    )
+                                    result = f"Deleted {len(deleted)} message(s) from {target.display_name} in #{target_channel.name} from the last {minutes} minute(s)."
+                                except discord.Forbidden:
+                                    result = "I don't actually have Manage Messages myself in that channel, can't do it."
+                                except Exception as e:
+                                    print(f"purge_messages error: {e}")
+                                    result = "Failed to delete those messages."
                     else:
                         result = "Unknown tool."
                     chat_messages.append({
@@ -693,6 +836,9 @@ async def on_message(message):
             await message.reply(reply)
         except Exception as e:
             print(f"Discord send error: {e}")
+
+        await save_person_memory(message.author.id, "user", user_text, is_private=is_dm)
+        await save_person_memory(message.author.id, "assistant", reply, is_private=is_dm)
 
     await bot.process_commands(message)
 
