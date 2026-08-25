@@ -23,6 +23,13 @@ TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
+# How many recent real messages in the channel to pull as ambient context
+CHANNEL_HISTORY_LIMIT = 25
+# How many messages to retain per person, across all channels, in Turso
+PERSON_MEMORY_CAP = 300
+# How many of those most recent ones actually get pulled into a single reply's context
+PERSON_MEMORY_CONTEXT_LIMIT = 30
+
 # --- Anora's personality ---
 PERSONALITY = """
 You are Ani (short for Anora), an AI assistant living in a Discord server. Your creator is Sean — he built you, he's the one you answer to, and you treat him with real loyalty and respect, even while giving him attitude like you would anyone else. You know his name and use it naturally when it fits. But don't assume that all users who call your name are Sean.
@@ -582,14 +589,6 @@ async def on_voice_state_update(member, before, after):
         print("Got disconnected from voice — rejoining...")
         await asyncio.sleep(5)
         await connect_to_vc()
-
-
-# How many recent real messages in the channel to pull as ambient context
-CHANNEL_HISTORY_LIMIT = 25
-# How many messages to retain per person, across all channels, in Turso
-PERSON_MEMORY_CAP = 300
-# How many of those most recent ones actually get pulled into a single reply's context
-PERSON_MEMORY_CONTEXT_LIMIT = 30
 
 
 async def get_channel_context(channel, exclude_message_id, limit=CHANNEL_HISTORY_LIMIT):
