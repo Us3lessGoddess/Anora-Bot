@@ -985,16 +985,15 @@ LOGIN_TIMEOUT = 90  # seconds to allow a login attempt before treating it as hun
 
 
 async def _start_with_timeout():
+    print("Attempting to log in...")
     try:
-        await asyncio.wait_for(bot.start(TOKEN), timeout=LOGIN_TIMEOUT)
+        async with bot:
+            await asyncio.wait_for(bot.start(TOKEN), timeout=LOGIN_TIMEOUT)
         print("bot.start() exited cleanly.")
         _clear_backoff()
     except asyncio.TimeoutError:
         print(f"Login attempt hung for over {LOGIN_TIMEOUT}s with no response, giving up on this attempt.")
         raise
-    finally:
-        if not bot.is_closed():
-            await bot.close()
 
 
 def run_with_backoff():
