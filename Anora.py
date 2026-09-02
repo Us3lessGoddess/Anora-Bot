@@ -14,6 +14,8 @@ import json
 from datetime import datetime, timedelta, timezone
 import tempfile
 
+sys.stdout.reconfigure(line_buffering=True)
+
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
