@@ -981,22 +981,37 @@ def _clear_backoff():
         pass
 
 
+LOGIN_TIMEOUT = 90  # seconds to allow a login attempt before treating it as hung and giving up
+
+
+async def _start_with_timeout():
+    try:
+        await asyncio.wait_for(bot.start(TOKEN), timeout=LOGIN_TIMEOUT)
+        print("bot.start() exited cleanly.")
+        _clear_backoff()
+    except asyncio.TimeoutError:
+        print(f"Login attempt hung for over {LOGIN_TIMEOUT}s with no response, giving up on this attempt.")
+        raise
+    finally:
+        if not bot.is_closed():
+            await bot.close()
+
+
 def run_with_backoff():
-    """If bot.run() dies, don't retry it in the same process, that risks reusing a bot
-    object whose internals discord.py already tore down, which can silently hang instead
-    of raising a catchable error. Instead: sleep for a real, growing cooldown here, then
-    let the process actually exit so Render spins up a completely fresh one next time,
-    with no stale state carried over. The backoff duration itself is persisted to a small
-    local file so it keeps growing across restarts instead of resetting to the minimum
-    every single time."""
+    """A crashed login is easy, we already catch that. The harder failure mode is a login
+    that never raises AND never completes, it just hangs forever, which happened even in a
+    completely fresh process. bot.run() can't be interrupted once it's blocking, so instead
+    we drive the connection ourselves with bot.start() inside asyncio.wait_for, which forces
+    a hard ceiling on how long any single attempt is allowed to hang before we give up on it.
+    Either way (raised exception or forced timeout), we sleep for a real, growing cooldown and
+    then let the process actually exit, so Render spins up a genuinely fresh one next time. The
+    backoff duration is persisted to a small local file so it keeps growing across restarts."""
     max_backoff = 3600  # cap at 1 hour
     try:
-        bot.run(TOKEN)
-        print("bot.run() exited cleanly.")
-        _clear_backoff()
+        asyncio.run(_start_with_timeout())
         return
     except Exception as e:
-        print(f"bot.run() crashed: {e}")
+        print(f"Login attempt failed: {e}")
 
     prev = _get_last_backoff()
     backoff = 60 if prev == 0 else min(prev * 2, max_backoff)
