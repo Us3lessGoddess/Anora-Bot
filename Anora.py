@@ -27,6 +27,41 @@ TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
+
+def _diagnostic_header_dump():
+    """One-time diagnostic for the Discord support ticket, captures the real request and
+    response headers from the exact blocked environment, no Shell access needed. Safe to
+    remove once you've pasted the output into the ticket, it's not needed for normal operation."""
+    import urllib.request
+    import urllib.error
+
+    url = "https://discord.com/api/v10/users/@me"
+    req = urllib.request.Request(url, headers={"Authorization": f"Bot {TOKEN}"})
+
+    print("=== DIAGNOSTIC: REQUEST HEADERS ===")
+    for k, v in req.header_items():
+        print(f"{k}: {'Bot [REDACTED]' if k.lower() == 'authorization' else v}")
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            print(f"=== DIAGNOSTIC: RESPONSE STATUS: {resp.status} ===")
+            print("=== DIAGNOSTIC: RESPONSE HEADERS ===")
+            for k, v in resp.getheaders():
+                print(f"{k}: {v}")
+            print(f"=== DIAGNOSTIC: RESPONSE BODY ===\n{resp.read().decode()}")
+    except urllib.error.HTTPError as e:
+        print(f"=== DIAGNOSTIC: RESPONSE STATUS (error): {e.code} ===")
+        print("=== DIAGNOSTIC: RESPONSE HEADERS ===")
+        for k, v in e.headers.items():
+            print(f"{k}: {v}")
+        print(f"=== DIAGNOSTIC: RESPONSE BODY ===\n{e.read().decode()}")
+    except Exception as e:
+        print(f"=== DIAGNOSTIC: request failed entirely: {e} ===")
+    print("=== DIAGNOSTIC: END ===")
+
+
+_diagnostic_header_dump()
+
 # How many recent real messages in the channel to pull as ambient context
 CHANNEL_HISTORY_LIMIT = 25
 # How many messages to retain per person, across all channels, in Turso
