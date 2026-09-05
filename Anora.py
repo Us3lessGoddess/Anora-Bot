@@ -985,40 +985,45 @@ def _clear_backoff():
 
 
 LOGIN_TIMEOUT = 90  # seconds to allow the initial login to complete before treating it as hung
-LIVENESS_STALE_AFTER = 180  # seconds of total silence from the gateway before assuming something's stuck
-LIVENESS_CHECK_INTERVAL = 30  # how often the liveness watchdog checks in
+EVENT_LOOP_STALE_AFTER = 150  # seconds with no event-loop heartbeat before assuming the process itself is frozen
+EVENT_LOOP_CHECK_INTERVAL = 20  # how often the async heartbeat task ticks
 
-_last_socket_activity = time.monotonic()
-_socket_activity_lock = threading.Lock()
-
-
-@bot.event
-async def on_socket_response(msg):
-    """Fires on every raw message from the gateway, heartbeats, dispatches, everything. Used
-    purely as a liveness signal, not for any actual logic."""
-    global _last_socket_activity
-    with _socket_activity_lock:
-        _last_socket_activity = time.monotonic()
+_last_loop_heartbeat = time.monotonic()
+_loop_heartbeat_lock = threading.Lock()
 
 
-def _liveness_watchdog():
-    """Runs for the bot's entire session, not just at startup. Every earlier fix here only
-    protected the initial login window, but a hang can also happen much later, e.g. during
-    discord.py's own internal reconnect after a routine network blip, well after any one-shot
-    startup watchdog has already stood down. This checks continuously for any sign of life on
-    the gateway connection, and force-kills the whole process at the OS level if nothing has
-    come through for too long, no matter when or why it got stuck."""
+@tasks.loop(seconds=EVENT_LOOP_CHECK_INTERVAL)
+async def _event_loop_heartbeat():
+    """discord.py already has its own reliable internal heartbeat-timeout (60s default) that
+    detects a dead gateway connection and reconnects on its own, no need to duplicate that.
+    What actually caused the original multi-hour freezes was the whole process getting stuck
+    in a way that even discord.py's own recovery couldn't run at all. Simply having this task
+    execute on schedule is proof the event loop itself is still alive and cycling normally,
+    that's a deliberately narrow, appropriate scope, not an attempt to judge connection health."""
+    global _last_loop_heartbeat
+    with _loop_heartbeat_lock:
+        _last_loop_heartbeat = time.monotonic()
+
+
+def _process_watchdog():
+    """Runs in a genuinely separate OS thread for the bot's entire session. If the async
+    heartbeat task above hasn't ticked in a long time, the event loop itself is frozen, not
+    just the Discord connection, discord.py's own recovery can't help here since it also runs
+    on that same frozen loop. Force-kills the whole process at the OS level so Render restarts
+    it fresh, regardless of what the freeze actually was."""
     while True:
-        time.sleep(LIVENESS_CHECK_INTERVAL)
-        with _socket_activity_lock:
-            idle_for = time.monotonic() - _last_socket_activity
-        if idle_for > LIVENESS_STALE_AFTER:
-            print(f"LIVENESS WATCHDOG: no gateway activity for {idle_for:.0f}s, force-killing the process.")
+        time.sleep(EVENT_LOOP_CHECK_INTERVAL)
+        with _loop_heartbeat_lock:
+            idle_for = time.monotonic() - _last_loop_heartbeat
+        if idle_for > EVENT_LOOP_STALE_AFTER:
+            print(f"PROCESS WATCHDOG: event loop unresponsive for {idle_for:.0f}s, force-killing the process.")
             os._exit(1)
+
 
 
 async def _start_with_timeout():
     print("Attempting to log in...")
+    _event_loop_heartbeat.start()
     async with bot:
         start_task = asyncio.create_task(bot.start(TOKEN))
         ready_task = asyncio.create_task(bot.wait_until_ready())
@@ -1030,7 +1035,6 @@ async def _start_with_timeout():
             # bot.start() run for as long as the bot stays up, no artificial timeout, that
             # was the bug: applying LOGIN_TIMEOUT to the whole session instead of just the
             # handshake was forcibly killing a perfectly good connection every 90 seconds.
-            # The ongoing liveness watchdog covers everything from here, not this function.
             print("Logged in and ready.")
             _clear_backoff()
             await start_task
@@ -1047,15 +1051,19 @@ async def _start_with_timeout():
 
 
 def run_with_backoff():
-    """Two layers of protection now. The liveness watchdog runs continuously for as long as
-    the process is alive, catching a hang anywhere, anytime, not just during startup, that was
-    the actual gap: every previous fix only guarded the initial login window, so a hang during
-    a later internal reconnect (well after that window closed) went completely unwatched. On
-    top of that, a crashed or cleanly-failed login is still caught here and handled with a
-    real, growing backoff before the process exits and Render restarts it fresh. The backoff
-    duration is persisted to a small local file so it keeps growing across restarts."""
+    """Two layers of protection now. The process watchdog runs continuously in a separate OS
+    thread for as long as the process is alive, checking that the async event loop itself is
+    still ticking, that's what actually failed before: the whole process froze so completely
+    that nothing, including discord.py's own recovery, could run at all. Connection-level
+    health (a dead gateway, a missed heartbeat) is deliberately left to discord.py's own
+    built-in heartbeat timeout, which already handles that reliably on its own, duplicating it
+    with a less certain signal is what caused a healthy, still-online connection to get killed
+    by mistake. On top of the process watchdog, a crashed or cleanly-failed login is still
+    caught here and handled with a real, growing backoff before the process exits and Render
+    restarts it fresh. The backoff duration is persisted to a small local file so it keeps
+    growing across restarts."""
     max_backoff = 3600  # cap at 1 hour
-    threading.Thread(target=_liveness_watchdog, daemon=True).start()
+    threading.Thread(target=_process_watchdog, daemon=True).start()
     try:
         asyncio.run(_start_with_timeout())
         return
