@@ -984,25 +984,37 @@ def _clear_backoff():
         pass
 
 
-LOGIN_TIMEOUT = 90  # seconds to allow a login attempt before treating it as hung and giving up
-HARD_WATCHDOG_TIMEOUT = LOGIN_TIMEOUT + 60  # absolute last-resort ceiling, see _hard_watchdog below
+LOGIN_TIMEOUT = 90  # seconds to allow the initial login to complete before treating it as hung
+LIVENESS_STALE_AFTER = 180  # seconds of total silence from the gateway before assuming something's stuck
+LIVENESS_CHECK_INTERVAL = 30  # how often the liveness watchdog checks in
 
-_login_resolved = threading.Event()
+_last_socket_activity = time.monotonic()
+_socket_activity_lock = threading.Lock()
 
 
-def _hard_watchdog(timeout_seconds):
-    """Last-resort safety net. asyncio.wait_for's cancellation is supposed to unstick a hung
-    bot.start(), but it isn't guaranteed to, if bot.start() is blocked on something that
-    doesn't yield back to the event loop, cancellation can itself just hang forever, which is
-    exactly what happened: a single login attempt froze for 8+ hours with none of our own
-    logging or backoff ever firing again. This runs in a genuinely separate OS thread, so it
-    keeps ticking no matter what's stuck in the asyncio world, and force-kills the whole
-    process at the OS level if nothing has resolved within the timeout. That guarantees Render
-    sees a dead process and restarts it, even in failure modes our async-level timeout can't
-    actually catch."""
-    if not _login_resolved.wait(timeout=timeout_seconds):
-        print(f"HARD WATCHDOG: still stuck after {timeout_seconds}s, force-killing the process.")
-        os._exit(1)
+@bot.event
+async def on_socket_response(msg):
+    """Fires on every raw message from the gateway, heartbeats, dispatches, everything. Used
+    purely as a liveness signal, not for any actual logic."""
+    global _last_socket_activity
+    with _socket_activity_lock:
+        _last_socket_activity = time.monotonic()
+
+
+def _liveness_watchdog():
+    """Runs for the bot's entire session, not just at startup. Every earlier fix here only
+    protected the initial login window, but a hang can also happen much later, e.g. during
+    discord.py's own internal reconnect after a routine network blip, well after any one-shot
+    startup watchdog has already stood down. This checks continuously for any sign of life on
+    the gateway connection, and force-kills the whole process at the OS level if nothing has
+    come through for too long, no matter when or why it got stuck."""
+    while True:
+        time.sleep(LIVENESS_CHECK_INTERVAL)
+        with _socket_activity_lock:
+            idle_for = time.monotonic() - _last_socket_activity
+        if idle_for > LIVENESS_STALE_AFTER:
+            print(f"LIVENESS WATCHDOG: no gateway activity for {idle_for:.0f}s, force-killing the process.")
+            os._exit(1)
 
 
 async def _start_with_timeout():
@@ -1018,13 +1030,12 @@ async def _start_with_timeout():
             # bot.start() run for as long as the bot stays up, no artificial timeout, that
             # was the bug: applying LOGIN_TIMEOUT to the whole session instead of just the
             # handshake was forcibly killing a perfectly good connection every 90 seconds.
+            # The ongoing liveness watchdog covers everything from here, not this function.
             print("Logged in and ready.")
-            _login_resolved.set()
             _clear_backoff()
             await start_task
         elif start_task in done:
             # bot.start() itself ended before ever becoming ready, a real login failure
-            _login_resolved.set()
             exc = start_task.exception()
             if exc:
                 raise exc
@@ -1032,23 +1043,19 @@ async def _start_with_timeout():
             print(f"Login attempt hung for over {LOGIN_TIMEOUT}s with no response, giving up on this attempt.")
             start_task.cancel()
             ready_task.cancel()
-            _login_resolved.set()
             raise TimeoutError("Login timed out")
 
 
 def run_with_backoff():
-    """A crashed login is easy, we already catch that. The harder failure mode is a login
-    that never raises AND never completes, it just hangs forever, which happened even in a
-    completely fresh process, and even with an asyncio-level timeout in place. So on top of
-    that timeout, a genuinely separate hard watchdog thread (see _hard_watchdog) guarantees
-    the process dies within a bounded window no matter what. Either way (raised exception,
-    forced async timeout, or the hard watchdog), we sleep for a real, growing cooldown and
-    then let the process actually exit, so Render spins up a genuinely fresh one next time.
-    The backoff duration is persisted to a small local file so it keeps growing across
-    restarts instead of resetting every time."""
+    """Two layers of protection now. The liveness watchdog runs continuously for as long as
+    the process is alive, catching a hang anywhere, anytime, not just during startup, that was
+    the actual gap: every previous fix only guarded the initial login window, so a hang during
+    a later internal reconnect (well after that window closed) went completely unwatched. On
+    top of that, a crashed or cleanly-failed login is still caught here and handled with a
+    real, growing backoff before the process exits and Render restarts it fresh. The backoff
+    duration is persisted to a small local file so it keeps growing across restarts."""
     max_backoff = 3600  # cap at 1 hour
-    watchdog_thread = threading.Thread(target=_hard_watchdog, args=(HARD_WATCHDOG_TIMEOUT,), daemon=True)
-    watchdog_thread.start()
+    threading.Thread(target=_liveness_watchdog, daemon=True).start()
     try:
         asyncio.run(_start_with_timeout())
         return
