@@ -1005,14 +1005,23 @@ async def _event_loop_heartbeat():
         _last_loop_heartbeat = time.monotonic()
 
 
+_watchdog_active = threading.Event()
+_watchdog_active.set()
+
+
 def _process_watchdog():
     """Runs in a genuinely separate OS thread for the bot's entire session. If the async
     heartbeat task above hasn't ticked in a long time, the event loop itself is frozen, not
     just the Discord connection, discord.py's own recovery can't help here since it also runs
     on that same frozen loop. Force-kills the whole process at the OS level so Render restarts
-    it fresh, regardless of what the freeze actually was."""
+    it fresh, regardless of what the freeze actually was. Deliberately paused during the
+    intentional backoff sleep in run_with_backoff, since there's no event loop running at all
+    during that sleep on purpose, that's not a freeze, and killing early there was defeating
+    the entire point of a growing backoff."""
     while True:
         time.sleep(EVENT_LOOP_CHECK_INTERVAL)
+        if not _watchdog_active.is_set():
+            continue
         with _loop_heartbeat_lock:
             idle_for = time.monotonic() - _last_loop_heartbeat
         if idle_for > EVENT_LOOP_STALE_AFTER:
@@ -1070,6 +1079,7 @@ def run_with_backoff():
     except Exception as e:
         print(f"Login attempt failed: {e}")
 
+    _watchdog_active.clear()  # standing down, this sleep is intentional, not a freeze
     prev = _get_last_backoff()
     backoff = 60 if prev == 0 else min(prev * 2, max_backoff)
     _save_backoff(backoff)
