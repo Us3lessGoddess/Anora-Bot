@@ -173,6 +173,29 @@ async def init_db():
         db_conn = None
 
 
+async def _run_db(sync_fn, *args, default=None):
+    """Runs a Turso operation in a thread, with one reconnect-and-retry if it fails. Turso's
+    Hrana protocol can invalidate a long-lived connection's underlying stream server-side
+    (a brief network blip, a server-side rotation, etc), and without this, that failure was
+    permanent, every operation would keep failing the same way until the whole process
+    restarted. Now a stale connection heals itself instead."""
+    global db_conn
+    if db_conn is None:
+        return default
+    try:
+        async with db_lock:
+            return await asyncio.to_thread(sync_fn, *args)
+    except Exception as e:
+        print(f"Turso operation error, reconnecting and retrying once: {e}")
+        try:
+            async with db_lock:
+                db_conn = await asyncio.to_thread(_db_connect_sync)
+                return await asyncio.to_thread(sync_fn, *args)
+        except Exception as e2:
+            print(f"Turso reconnect+retry failed: {e2}")
+            return default
+
+
 def _get_facts_sync(user_id):
     rows = db_conn.execute(
         "SELECT fact FROM user_facts WHERE user_id = ? ORDER BY id ASC",
@@ -196,6 +219,7 @@ def _add_fact_sync(user_id, fact, is_private, share_with_id):
         (str(user_id), fact, 1 if is_private else 0, str(share_with_id) if share_with_id else None),
     )
     db_conn.commit()
+    return True
 
 
 def _forget_facts_sync(user_id, match):
@@ -218,37 +242,15 @@ def _forget_facts_sync(user_id, match):
 
 
 async def get_facts(user_id):
-    if db_conn is None:
-        return []
-    try:
-        async with db_lock:
-            return await asyncio.to_thread(_get_facts_sync, user_id)
-    except Exception as e:
-        print(f"Turso facts read error: {e}")
-        return []
+    return await _run_db(_get_facts_sync, user_id, default=[])
 
 
 async def get_public_facts(user_id, asker_id):
-    if db_conn is None:
-        return []
-    try:
-        async with db_lock:
-            return await asyncio.to_thread(_get_public_facts_sync, user_id, asker_id)
-    except Exception as e:
-        print(f"Turso public facts read error: {e}")
-        return []
+    return await _run_db(_get_public_facts_sync, user_id, asker_id, default=[])
 
 
 async def remember_fact(user_id, fact, is_private=False, share_with_id=None):
-    if db_conn is None:
-        return False
-    try:
-        async with db_lock:
-            await asyncio.to_thread(_add_fact_sync, user_id, fact, is_private, share_with_id)
-        return True
-    except Exception as e:
-        print(f"Turso remember_fact error: {e}")
-        return False
+    return bool(await _run_db(_add_fact_sync, user_id, fact, is_private, share_with_id, default=False))
 
 
 def _save_person_memory_sync(user_id, role, content, is_private):
@@ -284,38 +286,18 @@ def _get_person_memory_sync(user_id, limit, include_private):
 
 
 async def save_person_memory(user_id, role, content, is_private):
-    if db_conn is None:
-        return
-    try:
-        async with db_lock:
-            await asyncio.to_thread(_save_person_memory_sync, user_id, role, content, is_private)
-    except Exception as e:
-        print(f"Turso person_memory save error: {e}")
+    await _run_db(_save_person_memory_sync, user_id, role, content, is_private, default=None)
 
 
 async def get_person_memory(user_id, is_dm, limit=PERSON_MEMORY_CONTEXT_LIMIT):
     """A DM can see the full history with this person, private included, since it's already
     the most trusted space. A public channel only ever sees what was already said in public,
     so DM content never bleeds into a reply that other people in the server can read."""
-    if db_conn is None:
-        return []
-    try:
-        async with db_lock:
-            return await asyncio.to_thread(_get_person_memory_sync, user_id, limit, is_dm)
-    except Exception as e:
-        print(f"Turso person_memory read error: {e}")
-        return []
+    return await _run_db(_get_person_memory_sync, user_id, limit, is_dm, default=[])
 
 
 async def forget_fact(user_id, match):
-    if db_conn is None:
-        return []
-    try:
-        async with db_lock:
-            return await asyncio.to_thread(_forget_facts_sync, user_id, match)
-    except Exception as e:
-        print(f"Turso forget_fact error: {e}")
-        return []
+    return await _run_db(_forget_facts_sync, user_id, match, default=[])
 
 
 def resolve_member_by_name(guild, name):
@@ -349,6 +331,7 @@ def _add_reminder_sync(channel_id, message, due_at_iso):
         (str(channel_id), message, due_at_iso),
     )
     db_conn.commit()
+    return True
 
 
 def _get_due_reminders_sync(now_iso):
@@ -364,28 +347,13 @@ def _get_due_reminders_sync(now_iso):
 
 
 async def schedule_reminder(channel_id, message, minutes):
-    if db_conn is None:
-        return False
     due_at = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
-    try:
-        async with db_lock:
-            await asyncio.to_thread(_add_reminder_sync, channel_id, message, due_at)
-        return True
-    except Exception as e:
-        print(f"Turso schedule_reminder error: {e}")
-        return False
+    return bool(await _run_db(_add_reminder_sync, channel_id, message, due_at, default=False))
 
 
 async def get_due_reminders():
-    if db_conn is None:
-        return []
     now_iso = datetime.now(timezone.utc).isoformat()
-    try:
-        async with db_lock:
-            return await asyncio.to_thread(_get_due_reminders_sync, now_iso)
-    except Exception as e:
-        print(f"Turso get_due_reminders error: {e}")
-        return []
+    return await _run_db(_get_due_reminders_sync, now_iso, default=[])
 
 
 TOOLS = [
