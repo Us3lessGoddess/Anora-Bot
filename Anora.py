@@ -14,6 +14,8 @@ import libsql
 import json
 from datetime import datetime, timedelta, timezone
 import tempfile
+import random
+import aiohttp
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -22,6 +24,11 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 VOICE_CHANNEL_ID = int(os.getenv("VOICE_CHANNEL_ID"))
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+MEME_CHANNEL_ID = 1537869001772769422
+MEME_SUBREDDIT = "Philippines"  # human-curated PH community, adjust if you find a better source
+MEME_MIN_INTERVAL_MINUTES = 15
+MEME_MAX_INTERVAL_MINUTES = 25
 TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
 TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
 
@@ -156,6 +163,13 @@ def _db_connect_sync():
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_person_memory_user ON person_memory(user_id, id)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS posted_memes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reddit_id TEXT UNIQUE NOT NULL,
+            posted_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
     conn.commit()
     return conn
 
@@ -356,6 +370,102 @@ async def get_due_reminders():
     return await _run_db(_get_due_reminders_sync, now_iso, default=[])
 
 
+def _add_posted_meme_sync(reddit_id):
+    db_conn.execute("INSERT OR IGNORE INTO posted_memes (reddit_id) VALUES (?)", (reddit_id,))
+    # Keep this bounded, only need enough history to avoid near-term repeats
+    db_conn.execute("""
+        DELETE FROM posted_memes WHERE id NOT IN (
+            SELECT id FROM posted_memes ORDER BY id DESC LIMIT 500
+        )
+    """)
+    db_conn.commit()
+    return True
+
+
+def _get_posted_meme_ids_sync():
+    rows = db_conn.execute("SELECT reddit_id FROM posted_memes").fetchall()
+    return {row[0] for row in rows}
+
+
+async def add_posted_meme(reddit_id):
+    await _run_db(_add_posted_meme_sync, reddit_id, default=False)
+
+
+async def get_posted_meme_ids():
+    result = await _run_db(_get_posted_meme_ids_sync, default=None)
+    return result if result else set()
+
+
+async def fetch_meme_candidates(subreddit=MEME_SUBREDDIT, limit=50):
+    """Pulls hot posts from a human-curated Filipino subreddit via Reddit's public read-only
+    JSON endpoint. This is a well-established, legitimate way bots read Reddit, not scraping
+    a platform that doesn't want it. Deliberately not IG/TikTok, see the chat for why."""
+    url = f"https://www.reddit.com/r/{subreddit}/hot.json?limit={limit}"
+    headers = {"User-Agent": "AnoraMemeBot/1.0 (Discord meme poster)"}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                if resp.status != 200:
+                    print(f"Meme fetch error: reddit returned {resp.status}")
+                    return []
+                data = await resp.json()
+    except Exception as e:
+        print(f"Meme fetch error: {e}")
+        return []
+
+    candidates = []
+    for child in data.get("data", {}).get("children", []):
+        post = child.get("data", {})
+        if post.get("stickied") or post.get("over_18"):
+            continue
+        reddit_id = post.get("id")
+        title = (post.get("title") or "").strip()
+        permalink = "https://reddit.com" + post.get("permalink", "")
+        if post.get("post_hint") == "image":
+            candidates.append({"id": reddit_id, "title": title, "url": post.get("url"), "type": "image"})
+        elif post.get("is_video"):
+            # Reddit-hosted video audio/video streams are split and awkward to merge reliably,
+            # post the permalink instead and let Discord's own preview do its best with it.
+            candidates.append({"id": reddit_id, "title": title, "url": permalink, "type": "video_link"})
+    return candidates
+
+
+async def post_random_meme():
+    channel = bot.get_channel(MEME_CHANNEL_ID)
+    if channel is None:
+        print(f"Meme channel {MEME_CHANNEL_ID} not found.")
+        return
+
+    candidates = await fetch_meme_candidates()
+    if not candidates:
+        print("No meme candidates fetched this cycle.")
+        return
+
+    posted_ids = await get_posted_meme_ids()
+    fresh = [c for c in candidates if c["id"] not in posted_ids]
+    if not fresh:
+        print("All fetched memes were already posted recently, skipping this cycle.")
+        return
+
+    pick = random.choice(fresh)
+    try:
+        await channel.send(f"{pick['title']}\n{pick['url']}")
+        await add_posted_meme(pick["id"])
+    except Exception as e:
+        print(f"Meme post error: {e}")
+
+
+async def meme_loop():
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        wait_minutes = random.uniform(MEME_MIN_INTERVAL_MINUTES, MEME_MAX_INTERVAL_MINUTES)
+        await asyncio.sleep(wait_minutes * 60)
+        try:
+            await post_random_meme()
+        except Exception as e:
+            print(f"Meme loop error: {e}")
+
+
 TOOLS = [
     {
         "type": "function",
@@ -539,13 +649,20 @@ async def connect_to_vc():
             print(f"connect_to_vc error: {e}")
 
 
+_meme_loop_started = False
+
+
 @bot.event
 async def on_ready():
+    global _meme_loop_started
     print(f"Logged in as {bot.user}")
     await init_db()
     await connect_to_vc()
     watchdog.start()
     reminder_loop.start()
+    if not _meme_loop_started:
+        _meme_loop_started = True
+        asyncio.create_task(meme_loop())
 
 
 @bot.event
