@@ -1,0 +1,1286 @@
+{
+ "spells": [
+  {
+   "name": "Cut",
+   "lv": 1,
+   "price": 0,
+   "dmg": 0,
+   "eff": "Bleed",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "cut"
+  },
+  {
+   "name": "Punch Spell",
+   "lv": 1,
+   "price": 0,
+   "dmg": 30,
+   "eff": null,
+   "heal": 0,
+   "ch": null,
+   "dura": null,
+   "id": "punch_s"
+  },
+  {
+   "name": "Weak Poison",
+   "lv": 1,
+   "price": 0,
+   "dmg": 0,
+   "eff": "Poison",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "w_poisn"
+  },
+  {
+   "name": "Ice Arrow",
+   "lv": 1,
+   "price": 25,
+   "dmg": 20,
+   "eff": "Freeze",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 1,
+   "id": "ice_a"
+  },
+  {
+   "name": "Rage Punch",
+   "lv": 1,
+   "price": 25,
+   "dmg": 45,
+   "eff": null,
+   "heal": 0,
+   "ch": null,
+   "dura": null,
+   "id": "rage_p"
+  },
+  {
+   "name": "Dust Ball",
+   "lv": 1,
+   "price": 20,
+   "dmg": 20,
+   "eff": "Blind",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "dust_b"
+  },
+  {
+   "name": "Ember",
+   "lv": 1,
+   "price": 20,
+   "dmg": 20,
+   "eff": "Burn",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "ember"
+  },
+  {
+   "name": "Slime Ball",
+   "lv": 1,
+   "price": 25,
+   "dmg": 20,
+   "eff": "Poison",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "slime_b"
+  },
+  {
+   "name": "Sunshine",
+   "lv": 1,
+   "price": 20,
+   "dmg": 25,
+   "eff": "Blind",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 2,
+   "id": "sun_sh"
+  },
+  {
+   "name": "Basic Heal",
+   "lv": 1,
+   "price": 10,
+   "dmg": 0,
+   "eff": null,
+   "heal": 30,
+   "ch": null,
+   "dura": null,
+   "id": "b_heal"
+  },
+  {
+   "name": "Bite",
+   "lv": 1,
+   "price": 30,
+   "dmg": 20,
+   "eff": null,
+   "heal": 20,
+   "ch": null,
+   "dura": null,
+   "id": "bite"
+  },
+  {
+   "name": "Confuse Ray",
+   "lv": 1,
+   "price": 35,
+   "dmg": 25,
+   "eff": "Confuse",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 1,
+   "id": "con_ray"
+  },
+  {
+   "name": "Great Heal",
+   "lv": 1,
+   "price": 25,
+   "dmg": 0,
+   "eff": null,
+   "heal": 60,
+   "ch": null,
+   "dura": null,
+   "id": "g_heal"
+  },
+  {
+   "name": "Ice Spikes",
+   "lv": 1,
+   "price": 50,
+   "dmg": 20,
+   "eff": "Freeze",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "ice_spk"
+  },
+  {
+   "name": "Sharp Spikes",
+   "lv": 1,
+   "price": 50,
+   "dmg": 25,
+   "eff": "Bleed",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "s_spk"
+  },
+  {
+   "name": "Mist",
+   "lv": 1,
+   "price": 30,
+   "dmg": 10,
+   "eff": "Blind",
+   "heal": 20,
+   "ch": 0.5,
+   "dura": 1,
+   "id": "mist"
+  },
+  {
+   "name": "Puff Ball",
+   "lv": 1,
+   "price": 45,
+   "dmg": 40,
+   "eff": "Blind",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 2,
+   "id": "pf_ball"
+  },
+  {
+   "name": "Dazzling Hit",
+   "lv": 2,
+   "price": 60,
+   "dmg": 30,
+   "eff": "Confuse",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "dz_ball"
+  },
+  {
+   "name": "Glitter Fall",
+   "lv": 2,
+   "price": 65,
+   "dmg": 15,
+   "eff": "Blind",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "gltr_fall"
+  },
+  {
+   "name": "Stomp",
+   "lv": 2,
+   "price": 45,
+   "dmg": 30,
+   "eff": "Stun",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 1,
+   "id": "stomp"
+  },
+  {
+   "name": "Concusive Blow",
+   "lv": 2,
+   "price": 70,
+   "dmg": 50,
+   "eff": "Stun",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "con_blw"
+  },
+  {
+   "name": "Fire Ball",
+   "lv": 3,
+   "price": 50,
+   "dmg": 40,
+   "eff": "Burn",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "fr_ball"
+  },
+  {
+   "name": "Devour",
+   "lv": 3,
+   "price": 75,
+   "dmg": 50,
+   "eff": null,
+   "heal": 25,
+   "ch": null,
+   "dura": null,
+   "id": "devr"
+  },
+  {
+   "name": "Meteor Shower",
+   "lv": 3,
+   "price": 85,
+   "dmg": 70,
+   "eff": "Stun",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 1,
+   "id": "m_shwr"
+  },
+  {
+   "name": "Flameshot",
+   "lv": 3,
+   "price": 75,
+   "dmg": 65,
+   "eff": "Burn",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "fl_shot"
+  },
+  {
+   "name": "Sonic Pebble",
+   "lv": 4,
+   "price": 100,
+   "dmg": 50,
+   "eff": "Pierce",
+   "heal": 0,
+   "ch": 1,
+   "dura": null,
+   "id": "son_pb"
+  },
+  {
+   "name": "Rusted Punch",
+   "lv": 2,
+   "price": 75,
+   "dmg": 60,
+   "eff": "Poison",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "rst_pnch"
+  },
+  {
+   "name": "Icicle Spears",
+   "lv": 3,
+   "price": 85,
+   "dmg": 65,
+   "eff": "Freeze",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 1,
+   "id": "ice_spr"
+  },
+  {
+   "name": "Glacial Storm",
+   "lv": 4,
+   "price": 110,
+   "dmg": 30,
+   "eff": "Freeze",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 2,
+   "id": "glcl_stm"
+  },
+  {
+   "name": "Smoke Bomb",
+   "lv": 2,
+   "price": 80,
+   "dmg": 50,
+   "eff": "Blind",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 2,
+   "id": "smk_bmb"
+  },
+  {
+   "name": "Crushing Waves",
+   "lv": 2,
+   "price": 90,
+   "dmg": 70,
+   "eff": null,
+   "heal": 0,
+   "ch": null,
+   "dura": null,
+   "id": "crs_wve"
+  },
+  {
+   "name": "Heat Wave",
+   "lv": 2,
+   "price": 90,
+   "dmg": 15,
+   "eff": "Burn",
+   "heal": 0,
+   "ch": 1,
+   "dura": 3,
+   "id": "ht_wve"
+  },
+  {
+   "name": "Diamond Arrow",
+   "lv": 4,
+   "price": 120,
+   "dmg": 60,
+   "eff": "Pierce",
+   "heal": 0,
+   "ch": 1,
+   "dura": null,
+   "id": "dia_arr"
+  },
+  {
+   "name": "Root Growth",
+   "lv": 5,
+   "price": 110,
+   "dmg": 75,
+   "eff": null,
+   "heal": 40,
+   "ch": null,
+   "dura": null,
+   "id": "rt_grw"
+  },
+  {
+   "name": "Walrus Punch",
+   "lv": 5,
+   "price": 135,
+   "dmg": 75,
+   "eff": "Stun",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "wal_pun"
+  },
+  {
+   "name": "Acid Rain",
+   "lv": 5,
+   "price": 105,
+   "dmg": 25,
+   "eff": "Poison",
+   "heal": 0,
+   "ch": 1,
+   "dura": 3,
+   "id": "ac_ran"
+  },
+  {
+   "name": "Tornado",
+   "lv": 5,
+   "price": 100,
+   "dmg": 50,
+   "eff": "Confuse",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "trndo"
+  },
+  {
+   "name": "Thunder Wave",
+   "lv": 5,
+   "price": 130,
+   "dmg": 90,
+   "eff": "Burn",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "thnd_wv"
+  },
+  {
+   "name": "Firefly Surge",
+   "lv": 5,
+   "price": 115,
+   "dmg": 50,
+   "eff": "Burn",
+   "heal": 30,
+   "ch": 1,
+   "dura": 2,
+   "id": "fr_srge"
+  },
+  {
+   "name": "Dreadful Whispers",
+   "lv": 6,
+   "price": 125,
+   "dmg": 60,
+   "eff": "Confuse",
+   "heal": 10,
+   "ch": 1,
+   "dura": 2,
+   "id": "drd_whs"
+  },
+  {
+   "name": "Solarbeam",
+   "lv": 6,
+   "price": 140,
+   "dmg": 120,
+   "eff": "Burn",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "slr_beam"
+  },
+  {
+   "name": "Earthquake",
+   "lv": 5,
+   "price": 100,
+   "dmg": 45,
+   "eff": "Stun",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 2,
+   "id": "erqke"
+  },
+  {
+   "name": "Massive heal",
+   "lv": 5,
+   "price": 100,
+   "dmg": 0,
+   "eff": null,
+   "heal": 90,
+   "ch": null,
+   "dura": null,
+   "id": "msv_hel"
+  },
+  {
+   "name": "Soul Bind",
+   "lv": 6,
+   "price": 130,
+   "dmg": 90,
+   "eff": "Bleed",
+   "heal": 20,
+   "ch": 1,
+   "dura": 1,
+   "id": "sol_bnd"
+  },
+  {
+   "name": "Deep Cut",
+   "lv": 5,
+   "price": 100,
+   "dmg": 55,
+   "eff": "Bleed",
+   "heal": 0,
+   "ch": 1,
+   "dura": 3,
+   "id": "dp_cut"
+  },
+  {
+   "name": "Energy Drain",
+   "lv": 6,
+   "price": 70,
+   "dmg": 35,
+   "eff": "Weaken",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 1,
+   "id": "ener_drn"
+  },
+  {
+   "name": "Silent Prayer",
+   "lv": 6,
+   "price": 110,
+   "dmg": 10,
+   "eff": "Weaken",
+   "heal": 60,
+   "ch": 1,
+   "dura": 1,
+   "id": "sil_pry"
+  },
+  {
+   "name": "Fracture",
+   "lv": 7,
+   "price": 150,
+   "dmg": 80,
+   "eff": "Weaken",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "fract"
+  },
+  {
+   "name": "Bone Split",
+   "lv": 7,
+   "price": 150,
+   "dmg": 60,
+   "eff": "Weaken",
+   "heal": 10,
+   "ch": 1,
+   "dura": 3,
+   "id": "bone_spl"
+  },
+  {
+   "name": "Tilted Taunt",
+   "lv": 7,
+   "price": 100,
+   "dmg": 45,
+   "eff": "Weaken",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "tlt_taut"
+  },
+  {
+   "name": "Divine Prayer",
+   "lv": 8,
+   "price": 200,
+   "dmg": 0,
+   "eff": "Weaken",
+   "heal": 100,
+   "ch": 0.5,
+   "dura": 1,
+   "id": "div_pray"
+  },
+  {
+   "name": "Venom Strike",
+   "lv": 8,
+   "price": 175,
+   "dmg": 70,
+   "eff": "Poison",
+   "heal": 0,
+   "ch": 1,
+   "dura": 3,
+   "id": "vnm_strk"
+  },
+  {
+   "name": "Mirage",
+   "lv": 8,
+   "price": 160,
+   "dmg": 40,
+   "eff": "Blind",
+   "heal": 0,
+   "ch": 1,
+   "dura": 3,
+   "id": "mirage"
+  },
+  {
+   "name": "Hemorrhage",
+   "lv": 8,
+   "price": 180,
+   "dmg": 80,
+   "eff": "Bleed",
+   "heal": 0,
+   "ch": 1,
+   "dura": 3,
+   "id": "hmrhge"
+  },
+  {
+   "name": "Mind Shatter",
+   "lv": 9,
+   "price": 190,
+   "dmg": 60,
+   "eff": "Confuse",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "mnd_shtr"
+  },
+  {
+   "name": "Cursed Fog",
+   "lv": 9,
+   "price": 185,
+   "dmg": 40,
+   "eff": "Blind",
+   "heal": 30,
+   "ch": 1,
+   "dura": 3,
+   "id": "crs_fog"
+  },
+  {
+   "name": "Warlord's Cry",
+   "lv": 9,
+   "price": 195,
+   "dmg": 75,
+   "eff": "Weaken",
+   "heal": 0,
+   "ch": 1,
+   "dura": 3,
+   "id": "wrl_cry"
+  },
+  {
+   "name": "Plague",
+   "lv": 9,
+   "price": 200,
+   "dmg": 40,
+   "eff": "Poison",
+   "heal": 0,
+   "ch": 1,
+   "dura": 4,
+   "id": "plague"
+  },
+  {
+   "name": "Petrify",
+   "lv": 10,
+   "price": 220,
+   "dmg": 90,
+   "eff": "Stun",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 2,
+   "id": "petrify"
+  },
+  {
+   "name": "Death Mark",
+   "lv": 10,
+   "price": 230,
+   "dmg": 75,
+   "eff": "Bleed",
+   "heal": 15,
+   "ch": 1,
+   "dura": 3,
+   "id": "dth_mark"
+  },
+  {
+   "name": "Shadowbind",
+   "lv": 10,
+   "price": 250,
+   "dmg": 80,
+   "eff": "Weaken",
+   "heal": 20,
+   "ch": 1,
+   "dura": 3,
+   "id": "shd_bind"
+  },
+  {
+   "name": "Flash Freeze",
+   "lv": 11,
+   "price": 400,
+   "dmg": 50,
+   "eff": "Freeze",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "fls_frz"
+  },
+  {
+   "name": "Bomb Shock",
+   "lv": 11,
+   "price": 300,
+   "dmg": 150,
+   "eff": "Burn",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "bmb_shk"
+  },
+  {
+   "name": "Tectonic Shift",
+   "lv": 10,
+   "price": 200,
+   "dmg": 100,
+   "eff": "Stun",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 2,
+   "id": "ttc_sft"
+  },
+  {
+   "name": "Bubble Blast",
+   "lv": 9,
+   "price": 130,
+   "dmg": 120,
+   "eff": null,
+   "heal": 0,
+   "ch": null,
+   "dura": null,
+   "id": "bb_blst"
+  },
+  {
+   "name": "Toxic Fumes",
+   "lv": 11,
+   "price": 185,
+   "dmg": 100,
+   "eff": "Poison",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "txc_fms"
+  },
+  {
+   "name": "Inferno Blast",
+   "lv": 11,
+   "price": 375,
+   "dmg": 180,
+   "eff": "Burn",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "inf_blst"
+  },
+  {
+   "name": "Void Grasp",
+   "lv": 8,
+   "price": 160,
+   "dmg": 55,
+   "eff": "Weaken",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "void_grsp"
+  },
+  {
+   "name": "Glacial Grip",
+   "lv": 8,
+   "price": 175,
+   "dmg": 65,
+   "eff": "Freeze",
+   "heal": 0,
+   "ch": 1,
+   "dura": 1,
+   "id": "glcl_grp"
+  },
+  {
+   "name": "Blood Ritual",
+   "lv": 9,
+   "price": 150,
+   "dmg": 50,
+   "eff": "Bleed",
+   "heal": 30,
+   "ch": 0.5,
+   "dura": 3,
+   "id": "bld_rtl"
+  },
+  {
+   "name": "Stone Curse",
+   "lv": 9,
+   "price": 195,
+   "dmg": 65,
+   "eff": "Stun",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 2,
+   "id": "stn_crs"
+  },
+  {
+   "name": "Arcane Shatter",
+   "lv": 10,
+   "price": 215,
+   "dmg": 85,
+   "eff": "Pierce",
+   "heal": 0,
+   "ch": 1,
+   "dura": null,
+   "id": "arc_sht"
+  },
+  {
+   "name": "Soulrend",
+   "lv": 11,
+   "price": 370,
+   "dmg": 120,
+   "eff": "Bleed",
+   "heal": 0,
+   "ch": 1,
+   "dura": 2,
+   "id": "soul_rnd"
+  },
+  {
+   "name": "Divine Judgement",
+   "lv": 11,
+   "price": 400,
+   "dmg": 85,
+   "eff": "Weaken",
+   "heal": 45,
+   "ch": 1,
+   "dura": 2,
+   "id": "div_jdg"
+  },
+  {
+   "name": "Shadow Plague",
+   "lv": 12,
+   "price": 510,
+   "dmg": 85,
+   "eff": "Poison",
+   "heal": 0,
+   "ch": 1,
+   "dura": 4,
+   "id": "shd_plg"
+  },
+  {
+   "name": "Eternal Frost",
+   "lv": 12,
+   "price": 420,
+   "dmg": 100,
+   "eff": "Freeze",
+   "heal": 0,
+   "ch": 0.5,
+   "dura": 3,
+   "id": "etl_frst"
+  },
+  {
+   "name": "Spectral Blade",
+   "lv": 12,
+   "price": 480,
+   "dmg": 130,
+   "eff": "Pierce",
+   "heal": 0,
+   "ch": 1,
+   "dura": null,
+   "id": "spc_bld"
+  },
+  {
+   "name": "Adaptive Strike",
+   "lv": 12,
+   "price": 500,
+   "dmg": 80,
+   "eff": "Pierce",
+   "heal": 60,
+   "ch": 1,
+   "dura": null,
+   "id": "adp_strk"
+  }
+ ],
+ "classes": [
+  {
+   "name": "Paladin",
+   "hp": 265,
+   "armor": 1,
+   "bonus": "Shield Raise & Holy Punishment: Every 3rd round (3, 6, 9...), Paladin rolls dice : Even = block ALL incoming damage and effects that round (Shield Raise). If the enemy is under a CC effect (Freeze, Stun, Confuse, Blind) on that same round and Paladin is attacking, deal +50% bonus damage instead (Holy Punishment). Block activates even if Paladin is under CC."
+  },
+  {
+   "name": "Barbarian",
+   "hp": 275,
+   "armor": 0,
+   "bonus": "Blood Frenzy & Bloodthirst: Every 4th round (4, 8, 12...), roll dice : Even = deal double damage that round (Blood Frenzy). Every 3rd round (3, 6, 9...), roll dice — Even = heal 35 HP (Bloodthirst). Only the spell damage is doubled for Blood Frenzy."
+  },
+  {
+   "name": "Apprentice",
+   "hp": 270,
+   "armor": 0,
+   "bonus": "Dual Cast: Every 3rd round (3, 6, 9...), roll dice : Even = spell fires twice, doubling damage, heals, and effect durations. If Dual Cast fizzles (Odd), Apprentice recovers 10 HP as consolation."
+  }
+ ],
+ "effects": [
+  {
+   "name": "Burn",
+   "dpr": 20,
+   "desc": "Deals damage to the enemy at the end of every round (damage from this ignores armor)"
+  },
+  {
+   "name": "Poison",
+   "dpr": 25,
+   "desc": "Deals damage to the enemy at the end of every round (damage from this ignores armor)"
+  },
+  {
+   "name": "Bleed",
+   "dpr": 30,
+   "desc": "Deals damage to the enemy at the end of every round (damage from this ignores armor)"
+  },
+  {
+   "name": "Stun",
+   "dpr": 0,
+   "desc": "Makes opponent unable to move or do any attack, during the duration of the effect"
+  },
+  {
+   "name": "Freeze",
+   "dpr": 10,
+   "desc": "Makes opponent unable to move or do any attack, during the duration of the effect"
+  },
+  {
+   "name": "Blind",
+   "dpr": 0,
+   "desc": "Opponent has 50% chance to miss the round (opponent will roll the dice at the start of his turn, if it turns out as an even number, he can still attack, if it is odd number then he misses the round)"
+  },
+  {
+   "name": "Confuse",
+   "dpr": 0,
+   "desc": "Opponent has 50% chance to hit himself with the incoming damage or spell that he dealt/casted(The opponent will roll the dice, if it comes out as even number, his attack or spell will still hit the opponent, if it is odd number, the damage or spell will be inflicted to himself"
+  },
+  {
+   "name": "Pierce",
+   "dpr": 0,
+   "desc": "This effect means that the incoming damage from the spell/attack ignored any armor"
+  },
+  {
+   "name": "Weaken",
+   "dpr": 5,
+   "desc": "Makes opponent deal 25% less damage (capped at -100 damage). Does not interfere with DPR(damage per round)"
+  }
+ ],
+ "items": [
+  {
+   "name": "Sunglasses",
+   "price": 20,
+   "hp": 30,
+   "armor": 0,
+   "ability": "Clear Vision: If the round is even number (round 2 ,4, 6.), item ability triggers. All blind effect on the wearer of this item is cleansed/removed.The cleanse occurs at the start of the user's turn that round."
+  },
+  {
+   "name": "Peasant's Hat",
+   "price": 10,
+   "hp": 20,
+   "armor": 0,
+   "ability": "Poor Man's Meal: Every 3 rounds, wearer heals 25hp"
+  },
+  {
+   "name": "Dwarf's Helmet",
+   "price": 35,
+   "hp": 25,
+   "armor": 1,
+   "ability": "Hard Head: Every 3 rounds(round 3, 6, 9…), item ability triggers. Item cleanses/removes any stun effect on the wearer of this item. The cleanse occurs at the start of the user's turn that round."
+  },
+  {
+   "name": "Raptor's Claw",
+   "price": 20,
+   "hp": 25,
+   "armor": 0,
+   "ability": "Raptor Pounce: During the first round of any battle(pvp/monster), wearer has a 50% chance to deal double damage."
+  },
+  {
+   "name": "Zombie's Tooth",
+   "price": 10,
+   "hp": 15,
+   "armor": 0,
+   "ability": "Infection: Every 2 rounds(round 2, 4, 6…) wearer rolls dice(even for poison, odd means no poison) for a 50% chance to apply poison to the enemy. This roll is conducted at the beginning of rounds when it is the user's turn."
+  }
+ ],
+ "monsters": [
+  {
+   "name": "Swordsman",
+   "hp": 100,
+   "dmg": 15,
+   "armor": 0,
+   "eff": null,
+   "ch": null,
+   "reward": {
+    "amount": 1,
+    "cur": "coins"
+   },
+   "limit": 15
+  },
+  {
+   "name": "Rapier Duelist",
+   "hp": 225,
+   "dmg": 40,
+   "armor": 2,
+   "eff": "Bleed",
+   "ch": 1,
+   "reward": {
+    "amount": 1,
+    "cur": "coins"
+   },
+   "limit": 8
+  },
+  {
+   "name": "Zombie",
+   "hp": 200,
+   "dmg": 20,
+   "armor": 0,
+   "eff": "Poison",
+   "ch": 0.5,
+   "reward": {
+    "amount": 1,
+    "cur": "coins"
+   },
+   "limit": 10
+  },
+  {
+   "name": "Treant",
+   "hp": 500,
+   "dmg": 55,
+   "armor": 3,
+   "eff": "Poison",
+   "ch": 1,
+   "reward": {
+    "amount": 2,
+    "cur": "coins"
+   },
+   "limit": 6
+  },
+  {
+   "name": "Crusader",
+   "hp": 600,
+   "dmg": 25,
+   "armor": 0,
+   "eff": null,
+   "ch": null,
+   "reward": {
+    "amount": 1,
+    "cur": "coins"
+   },
+   "limit": 8
+  },
+  {
+   "name": "Marksman",
+   "hp": 400,
+   "dmg": 70,
+   "armor": 3,
+   "eff": "Bleed",
+   "ch": 1,
+   "reward": {
+    "amount": 2,
+    "cur": "coins"
+   },
+   "limit": 6
+  },
+  {
+   "name": "Imp",
+   "hp": 400,
+   "dmg": 75,
+   "armor": 3,
+   "eff": "Bleed",
+   "ch": 1,
+   "reward": {
+    "amount": 2,
+    "cur": "coins"
+   },
+   "limit": 6
+  },
+  {
+   "name": "Copper Golem",
+   "hp": 700,
+   "dmg": 65,
+   "armor": 3,
+   "eff": null,
+   "ch": null,
+   "reward": {
+    "amount": 2,
+    "cur": "coins"
+   },
+   "limit": 7
+  },
+  {
+   "name": "Witch",
+   "hp": 500,
+   "dmg": 65,
+   "armor": 5,
+   "eff": "Poison",
+   "ch": 1,
+   "reward": {
+    "amount": 3,
+    "cur": "coins"
+   },
+   "limit": 6
+  },
+  {
+   "name": "Wood Golem",
+   "hp": 750,
+   "dmg": 65,
+   "armor": 8,
+   "eff": null,
+   "ch": null,
+   "reward": {
+    "amount": 3,
+    "cur": "coins"
+   },
+   "limit": 6
+  },
+  {
+   "name": "Emberling",
+   "hp": 600,
+   "dmg": 70,
+   "armor": 8,
+   "eff": "Burn",
+   "ch": 1,
+   "reward": {
+    "amount": 4,
+    "cur": "coins"
+   },
+   "limit": 5
+  },
+  {
+   "name": "Cloud Spirit",
+   "hp": 150,
+   "dmg": 400,
+   "armor": 5,
+   "eff": null,
+   "ch": null,
+   "reward": {
+    "amount": 1,
+    "cur": "gems"
+   },
+   "limit": 3
+  },
+  {
+   "name": "Stone Golem",
+   "hp": 800,
+   "dmg": 100,
+   "armor": 15,
+   "eff": null,
+   "ch": null,
+   "reward": {
+    "amount": 5,
+    "cur": "coins"
+   },
+   "limit": 5
+  },
+  {
+   "name": "Corrupted Knight",
+   "hp": 800,
+   "dmg": 125,
+   "armor": 5,
+   "eff": null,
+   "ch": null,
+   "reward": {
+    "amount": 6,
+    "cur": "coins"
+   },
+   "limit": 5
+  },
+  {
+   "name": "Cavalier",
+   "hp": 1000,
+   "dmg": 80,
+   "armor": 3,
+   "eff": null,
+   "ch": null,
+   "reward": {
+    "amount": 4,
+    "cur": "coins"
+   },
+   "limit": 5
+  },
+  {
+   "name": "Baby Dragon",
+   "hp": 2000,
+   "dmg": 65,
+   "armor": 0,
+   "eff": null,
+   "ch": null,
+   "reward": {
+    "amount": 5,
+    "cur": "coins"
+   },
+   "limit": 5
+  },
+  {
+   "name": "Zealot",
+   "hp": 1000,
+   "dmg": 250,
+   "armor": 5,
+   "eff": "Burn",
+   "ch": 1,
+   "reward": {
+    "amount": 10,
+    "cur": "coins"
+   },
+   "limit": 5
+  },
+  {
+   "name": "Enchantress",
+   "hp": 500,
+   "dmg": 500,
+   "armor": 10,
+   "eff": null,
+   "ch": null,
+   "reward": {
+    "amount": 2,
+    "cur": "gems"
+   },
+   "limit": 3
+  }
+ ],
+ "bosses": [
+  {
+   "name": "Yuki Onna",
+   "hp": 100000,
+   "armor": 0,
+   "spells": [
+    "Ice Spikes",
+    "Icicle Spears",
+    "Glacial Storm",
+    "Ice Arrow",
+    "Mind Shatter",
+    "Diamond Arrow"
+   ],
+   "image": "https://i.imgur.com/Ntbm7W3.png"
+  },
+  {
+   "name": "Hydra",
+   "hp": 100000,
+   "armor": 3,
+   "spells": [
+    "Confuse Ray",
+    "Tornado",
+    "Plague",
+    "Venom Strike",
+    "Acid Rain",
+    "Slime Ball"
+   ],
+   "image": "https://i.imgur.com/Cji9RpM.png"
+  },
+  {
+   "name": "Cerberus",
+   "hp": 100000,
+   "armor": 2,
+   "spells": [
+    "Fire Ball",
+    "Heat Wave",
+    "Thunder Wave",
+    "Deep Cut",
+    "Flameshot",
+    "Solarbeam"
+   ],
+   "image": "https://i.imgur.com/aYimVoO.png"
+  },
+  {
+   "name": "Minotaur",
+   "hp": 100000,
+   "armor": 0,
+   "spells": [
+    "Concusive Blow",
+    "Hemorrhage",
+    "Fracture",
+    "Death Mark",
+    "Walrus Punch",
+    "Earthquake"
+   ],
+   "image": "https://i.imgur.com/VS9oium.png"
+  }
+ ],
+ "tiers": {
+  "low": [
+   "Swordsman",
+   "Rapier Duelist",
+   "Zombie",
+   "Treant",
+   "Crusader"
+  ],
+  "mid": [
+   "Marksman",
+   "Imp",
+   "Copper Golem",
+   "Witch",
+   "Wood Golem",
+   "Emberling",
+   "Cloud Spirit"
+  ],
+  "high": [
+   "Stone Golem",
+   "Corrupted Knight",
+   "Cavalier",
+   "Baby Dragon",
+   "Zealot",
+   "Enchantress"
+  ]
+ }
+}
