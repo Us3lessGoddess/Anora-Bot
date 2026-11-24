@@ -1,0 +1,10 @@
+{
+  "name": "wizard-battle-web",
+  "version": "1.0.0",
+  "description": "Wizard Battle — medieval fantasy dice & spells game (web edition). Node + Turso.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node test/engine.test.js && node test/smoke.test.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "@libsql/client": "^0.14.0" },
+  "license": "MIT"
+}

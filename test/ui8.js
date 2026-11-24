@@ -1,0 +1,30 @@
+const { chromium } = require('/opt/npm-tools/node_modules/playwright');
+const { spawn } = require('child_process'), crypto = require('crypto'), fs = require('fs');
+const PORT = 3266, SECRET = 'test-secret-test-secret-123456', DBF = '/tmp/wb-ui8.db';
+for (const f of [DBF, DBF + '-wal', DBF + '-shm']) try { fs.unlinkSync(f); } catch {}
+const srv = spawn('node', ['server.js'], { env: { ...process.env, PORT, SESSION_SECRET: SECRET, LOCAL_DB: DBF, TURSO_URL: '', TURSO_TOKEN: '' }, stdio: ['ignore', 'pipe', 'inherit'] });
+const hmac = d => crypto.createHmac('sha256', SECRET).update(d).digest('base64url');
+const cap = code => { const exp = Date.now() + 60000, n = crypto.randomBytes(8).toString('hex'); return Buffer.from(`${exp}.${n}.${hmac(`c.${code}.${exp}.${n}`)}`).toString('base64url'); };
+const U = `http://127.0.0.1:${PORT}`; const H = c => ({ 'Content-Type': 'application/json', cookie: c.join('=') });
+const mk = async (name, cls, g) => { const r = await fetch(U + '/api/signup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: name, password: 'longpassword1', captchaToken: cap('ABCDE'), captchaAnswer: 'ABCDE' }) }); const c = r.headers.get('set-cookie').split(';')[0].split('='); await fetch(U + '/api/onboard', { method: 'POST', headers: H(c), body: JSON.stringify({ class_name: cls, gender: g }) }); return c; };
+(async () => {
+  await new Promise(r => srv.stdout.on('data', d => String(d).includes('listening') && r()));
+  const cA = await mk('Alice', 'Apprentice', 'f'), cB = await mk('Bob', 'Paladin', 'm');
+  await fetch(U + '/api/chat/send', { method: 'POST', headers: H(cB), body: JSON.stringify({ text: 'Anyone up for a duel? I just reached the fort.' }) });
+  const br = await chromium.launch({ args: ['--no-sandbox'] }); const errs = [];
+  const open = async c => { const ctx = await br.newContext({ viewport: { width: 1280, height: 800 } }); await ctx.addCookies([{ name: c[0], value: c[1], url: U }]); const p = await ctx.newPage(); p.on('pageerror', e => errs.push('PAGEERR ' + e.message)); p.on('console', m => m.type() === 'error' && !/ERR_NAME|Failed to load/.test(m.text()) && errs.push('CONSOLE ' + m.text())); return p; };
+  const A = await open(cA), B = await open(cB);
+  await B.goto(U + '/#/hub'); await A.goto(U + '/#/hub'); await A.waitForTimeout(1800);
+  await A.screenshot({ path: '/tmp/shots/s1-nav.png' });
+  await A.click('#cf'); await A.waitForTimeout(800); await A.fill('#ci', 'Greetings, wizards of the realm!'); await A.click('#cs'); await A.waitForTimeout(1200); await A.screenshot({ path: '/tmp/shots/s2-chat.png' });
+  const mine = await A.$$eval('.cm', e => e.map(x => x.textContent)); console.log('chat msgs:', mine.length, '| contains mine:', mine.some(t => t.includes('Greetings')));
+  await A.click('#onl'); await A.waitForTimeout(900); await A.screenshot({ path: '/tmp/shots/s3-online.png' });
+  console.log('online count shown:', await A.textContent('#online-count'));
+  await A.click('.onrow:has-text("Bob")'); await A.waitForTimeout(1200); await A.screenshot({ path: '/tmp/shots/s4-profile.png' });
+  await A.click('#pm'); await A.waitForTimeout(800); await A.fill('#ci', 'Fancy a duel, Bob?'); await A.click('#cs'); await A.waitForTimeout(800);
+  await B.waitForTimeout(5000); const badge = await B.$eval('.chat-fab .cbadge', e => e.textContent).catch(() => 'none'); console.log('Bob sees unread badge:', badge);
+  await A.click('#cm'); await A.click('#ch'); await B.waitForSelector('.inv', { timeout: 15000 }); await B.screenshot({ path: '/tmp/shots/s5-invite.png' });
+  await B.click('.inv button[data-a="1"]'); await B.waitForSelector('#roll', { timeout: 15000 }); await A.waitForSelector('#roll', { timeout: 20000 });
+  await A.waitForTimeout(5000); await A.screenshot({ path: '/tmp/shots/s6-pvp-A.png' }); await B.screenshot({ path: '/tmp/shots/s7-pvp-B.png' });
+  console.log('errors:', errs.length ? errs : 'none'); await br.close();
+})().catch(e => { console.error('FAIL', e); process.exitCode = 1; }).finally(() => srv.kill());
